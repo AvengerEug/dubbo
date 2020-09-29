@@ -1,0 +1,3 @@
+userService=com.eugene.sumarry.aop.UserServiceImpl
+userServiceProxy1=com.eugene.sumarry.aop.UserServiceImplProxy1
+userServiceProxy2=com.eugene.sumarry.aop.UserServiceImplProxy2

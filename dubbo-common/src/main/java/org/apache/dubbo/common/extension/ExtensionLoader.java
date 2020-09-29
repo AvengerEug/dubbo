@@ -472,6 +472,7 @@ public class ExtensionLoader<T> {
 
     @SuppressWarnings("unchecked")
     public T getAdaptiveExtension() {
+        // 第一次进入这个方法时，当前的this为ExtensionFactory的扩展类，因此此时目的是获取ExtensionFactory类型的扩展
         Object instance = cachedAdaptiveInstance.get();
         if (instance == null) {
             if (createAdaptiveInstanceError == null) {
