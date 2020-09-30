@@ -470,9 +470,16 @@ public class ExtensionLoader<T> {
         }
     }
 
+    /**
+     * 第一次进入这个方法时，当前的this为ExtensionFactory的扩展类，因此此时目的是获取ExtensionFactory类型的扩展
+     * 即加载classpath下面的所有叫org.apache.dubbo.common.extension.ExtensionFactory的文件
+     * @see ExtensionLoader#createAdaptiveExtension()
+     * 的这段代码：
+     * ExtensionLoader.getExtensionLoader(ExtensionFactory.class).getAdaptiveExtension()
+     */
     @SuppressWarnings("unchecked")
     public T getAdaptiveExtension() {
-        // 第一次进入这个方法时，当前的this为ExtensionFactory的扩展类，因此此时目的是获取ExtensionFactory类型的扩展
+
         Object instance = cachedAdaptiveInstance.get();
         if (instance == null) {
             if (createAdaptiveInstanceError == null) {
@@ -547,6 +554,15 @@ public class ExtensionLoader<T> {
         }
     }
 
+    /**
+     * 开始注入扩展类，有一个硬性条件：只有当前ExtensionLoader中objectFactory属性有值才行
+     * objectFactory属性一般是在构造方法中给填充进去的。
+     * 当ExtensionLoader维护的type为ExtensionFactory时，也就是要获取类型为ExtensionFactory的
+     * extensionLoader时，它的objectFactory对象为null，因此不需要注入
+     *
+     * @param instance
+     * @return
+     */
     private T injectExtension(T instance) {
         try {
             if (objectFactory != null) {
@@ -615,6 +631,17 @@ public class ExtensionLoader<T> {
         return getExtensionClasses().get(name);
     }
 
+    /**
+     * 先从缓存中获取，缓存不存在则直接加载SPI文件(只加载当前类相关的SPI文件)，
+     * 打个比方：如果当前类(ExtensionLoader)type属性是 com.eugene.sumarry.aop.UserService
+     * 那么此时加载的就是名字为com.eugene.sumarry.aop.UserService的spi文件
+     * @see  ExtensionLoader#loadExtensionClasses()
+     *
+     * 执行完loadExtensionClasses后，会把加载出来的一些Class对象(所有实现type属性对应的类的对象)
+     * 添加到Map中(其中key为spi文件中配置的key，value为spi对应的value)，并将它缓存起来
+     *
+     * @return 返回的是一个map，其中key为spi中配置的name，value为spi中配置的value，同时当前ExtensionLoader中的cachedClasses属性中有值了
+     */
     private Map<String, Class<?>> getExtensionClasses() {
         Map<String, Class<?>> classes = cachedClasses.get();
         if (classes == null) {
@@ -629,7 +656,30 @@ public class ExtensionLoader<T> {
         return classes;
     }
 
-    // synchronized in getExtensionClasses
+    /**
+     * 官方给的注释：synchronized in getExtensionClasses
+     *
+     * 加载SPI的class类
+     * 第一步：缓存默认的扩展名称，保存至cachedDefaultName中，默认为null，如果type对应的类中的@SPI接口中有value，则使用指定的value
+     * @see ExtensionLoader#cacheDefaultExtensionName()
+     *
+     * 第二步：记载classpath下面的三个指定目录下的type文件
+     * 六个指定目录：
+     * META-INF/dubbo/internal/
+     * META-INF/dubbo/
+     * META-INF/services/
+     *
+     * (type是一个Class对象，eg: com.eugene.sumarry.aop.UserService, 那么就是去六个指定目录下加载com.eugene.sumarry.aop.UserService文件)
+     * 同时，如果type是框架内部的特殊名称前缀，eg: org.apache，此时会将org.apache替换成com.alibaba，并同时加载
+     * org.apache和com.alibaba的spi文件
+     * @see ExtensionLoader#loadDirectory(java.util.Map, java.lang.String, java.lang.String)
+     * 记载spi文件的细节主要参考如下方法
+     * @see ExtensionLoader#loadClass(java.util.Map, java.net.URL, java.lang.Class, java.lang.String)
+     *
+     * @return 返回一个map，其中key为spi文件中配置的key，value为spi配置的value，只不过value转成了Class对象
+     * 总结：因此，执行完这个方法后，对当前spi文件中配置的所有类都会保存到当前ExtensionLoad对应的
+     *      cachedAdaptiveClass、cachedWrapperClasses、cachedActivates、cachedNames、cachedClasses中去，
+     */
     private Map<String, Class<?>> loadExtensionClasses() {
         cacheDefaultExtensionName();
 
@@ -719,6 +769,32 @@ public class ExtensionLoader<T> {
         }
     }
 
+    /**
+     * 此方法做了蛮多事
+     * 1、spi中配置的实现类中存在@Adaptive注解，则将它缓存至ExtensionLoad的cachedAdaptiveClass属性中
+     *    这个cachedAdaptiveClass属性为一个Class对象，只能缓存一个被@Adaptive注解修饰的实现类，若有
+     *    多个，则直接抛异常。具体见如下方法的实现：
+     * @see ExtensionLoader#cacheAdaptiveClass(java.lang.Class)
+     *
+     * 2、spi中配置的实现类是一个wrapper类，则将它缓存到cachedWrapperClasses中，这个属性为juc下面的map，
+     *    因此，可以存多个wrapper类。其中判断一个实现类是否为wrapper类的步骤参考如下方法.
+     *    (大致的逻辑就是看这个类是否有以Type为参数的有参构造方法)
+     * @see ExtensionLoader#isWrapperClass(java.lang.Class)
+     *
+     * 3、spi中配置的实现类是一个被@Activate注解修饰的类，会被缓存到cachedActivates的map中去
+     *
+     * 4、将当前spi中配置的名称缓存到当前ExtensionLoader对应的cachedNames中，其中cachedNames是一个juc下面的map，
+     *   key为当前spi文件中配置的value(会转换成Class对象)，value为spi中配置的名称, 与cachedClasses属性缓存的相反，
+     *   cachedClasses内部的data是一个map，其中key为spi中配置的名称，value为spi中配置的value
+     *
+     * 5、将解析spi出来的类全部存到传入的extensionClasses参数中，最终会存到当前ExtensionLoader的cachedClasses属性中
+     *
+     * @param extensionClasses 存储解析出来的spi文件的map，最终会存到当前ExtensionLoader的cachedClasses属性中
+     * @param resourceURL 对应当前解析的spi文件
+     * @param clazz 在spi中配置的value，并把它转换成Class对象了
+     * @param name 在spi中配置的key
+     * @throws NoSuchMethodException
+     */
     private void loadClass(Map<String, Class<?>> extensionClasses, java.net.URL resourceURL, Class<?> clazz, String name) throws NoSuchMethodException {
         if (!type.isAssignableFrom(clazz)) {
             throw new IllegalStateException("Error occurred when loading extension class (interface: " +
@@ -840,20 +916,55 @@ public class ExtensionLoader<T> {
         return extension.value();
     }
 
+    /**
+     * 此方法为创建扩展类，包含了三个步骤：
+     * 第一步：获取扩展类的Class对象  ===> Class clazz = getAdaptiveExtensionClass()方法
+     * 第二步：使用Class对象创建实例  ===> T t = clazz.newInstance();
+     * 第三步：注入扩展类(所谓的dubbo的aop和ioc)  ===> injectExtension(t)
+     *
+     * 第一次调用时，是type为org.apache.dubbo.common.extension.ExtensionFactory的extensionLoader
+     * 的getAdaptiveExtension方法调过来的。
+     * @see ExtensionLoader#ExtensionLoader(java.lang.Class)
+     * 的这段代码：
+     * ExtensionLoader.getExtensionLoader(ExtensionFactory.class).getAdaptiveExtension()
+     *
+     * @return
+     */
     @SuppressWarnings("unchecked")
     private T createAdaptiveExtension() {
         try {
+            // 在此处(getAdaptiveExtensionClass().newInstance())会执行对应type的实现类的默认构造方法
+            // 其中特别要注意的是org.apache.dubbo.common.extension.factory.AdaptiveExtensionFactory类的构造方法
+            // 因为在获取type为ExtensionFactory的ExtensionLoader时，会调用到它
             return injectExtension((T) getAdaptiveExtensionClass().newInstance());
         } catch (Exception e) {
             throw new IllegalStateException("Can't create adaptive extension " + type + ", cause: " + e.getMessage(), e);
         }
     }
 
+    /**
+     * 此方法为createAdaptiveExtension方法的第一个步骤：获取扩展类的Class对象
+     * 主要是通过getExtensionClasses方法来处理的
+     * @see ExtensionLoader#getExtensionClasses()
+     *
+     *
+     * @return
+     */
     private Class<?> getAdaptiveExtensionClass() {
+        // 这个步骤完成后，当前ExtensionLoader对应type的spi文件全部加载完成，同时当前
+        // ExtensionLoader的cachedClasses属性中存了所有type的实现类
         getExtensionClasses();
+
+        /**
+         * 如果当前ExtensionLoader对应type的spi配置的实现类中有@Adaptive注解标识的类，则直接返回它
+         * cachedAdaptiveClass的缓存是在如下方法中完成的
+         * @see ExtensionLoader#loadClass(java.util.Map, java.net.URL, java.lang.Class, java.lang.String)
+         */
         if (cachedAdaptiveClass != null) {
             return cachedAdaptiveClass;
         }
+
+        // 在spi配置的实现类中若不存在adaptive类，则手动创建它
         return cachedAdaptiveClass = createAdaptiveExtensionClass();
     }
 

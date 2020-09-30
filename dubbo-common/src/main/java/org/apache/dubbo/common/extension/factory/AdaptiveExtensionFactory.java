@@ -32,6 +32,15 @@ public class AdaptiveExtensionFactory implements ExtensionFactory {
 
     private final List<ExtensionFactory> factories;
 
+    /**
+     * 在初始化type为ExtensionFactory的ExtensionLoader时，会去创建type为ExtensionFactory的adaptive类，
+     * 最终会在如下方法处调用到这里来：
+     * @see org.apache.dubbo.common.extension.ExtensionLoader#createAdaptiveExtension()
+     * 主要是上述方法中的这行代码： getAdaptiveExtensionClass().newInstance()
+     *
+     * 这个对象其实就是将所有的ExtensionFactory保存了起来，保存到了自己内部维护的list中
+     *
+     */
     public AdaptiveExtensionFactory() {
         ExtensionLoader<ExtensionFactory> loader = ExtensionLoader.getExtensionLoader(ExtensionFactory.class);
         List<ExtensionFactory> list = new ArrayList<ExtensionFactory>();
