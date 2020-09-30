@@ -89,11 +89,33 @@ public class AdaptiveClassCodeGenerator {
             throw new IllegalStateException("No adaptive method exist on extension " + type.getName() + ", refuse to create the adaptive class!");
         }
 
+        /**
+         * 生成的代理类格式如下(以Protocol 接口为例，未生成方法的情况下)：
+         * package com.alibaba.dubbo.rpc;
+         * import com.alibaba.dubbo.common.extension.ExtensionLoader;
+         * public class Protocol$Adaptive implements com.alibaba.dubbo.rpc.Protocol {
+         *     // 省略方法代码
+         * }
+         */
         StringBuilder code = new StringBuilder();
         code.append(generatePackageInfo());
         code.append(generateImports());
         code.append(generateClassDeclaration());
-        
+
+        /**
+         * 生成的方法有两种情况
+         * 第一种：无@Adaptive注解修饰
+         * 第二种：有@Adaptive注解修饰
+         *
+         * 以Protocol接口为例，该接口的destroy和getDefaultPort未标注Adaptive注解，其他方法均标注了Adaptive注解。
+         * 对于第一种情况，Dubbo生成的代理类中，并不会做任何处理，仅仅是抛出一个异常
+         * 以 Protocol 接口的 destroy 方法为例，最终会在方法中生成如下语句
+         *     throw new UnsupportedOperationException(
+         *             "method public abstract void com.alibaba.dubbo.rpc.Protocol.destroy() of interface com.alibaba.dubbo.rpc.Protocol is not adaptive method!");
+         *
+         * 
+         *
+         */
         Method[] methods = type.getMethods();
         for (Method method : methods) {
             code.append(generateMethod(method));

@@ -35,7 +35,7 @@ import org.springframework.context.event.ContextClosedEvent;
 import java.util.Set;
 
 /**
- * SpringExtensionFactory
+ * SpringExtensionFactory：用于从 Spring 的 IOC 容器中获取所需的拓展
  */
 public class SpringExtensionFactory implements ExtensionFactory {
     private static final Logger logger = LoggerFactory.getLogger(SpringExtensionFactory.class);

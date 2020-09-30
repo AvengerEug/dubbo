@@ -17,6 +17,7 @@
 package org.apache.dubbo.common.extension;
 
 import org.apache.dubbo.common.URL;
+import org.apache.dubbo.common.extension.factory.AdaptiveExtensionFactory;
 import org.apache.dubbo.common.extension.support.ActivateComparator;
 import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
@@ -84,6 +85,14 @@ public class ExtensionLoader<T> {
 
     private final Class<?> type;
 
+    /**
+     * 如果当前ExtensionLoader中维护的type不是ExtensionFactory，此时这个objectFactory属性中
+     * 存的值就是AdaptiveExtensionFactory类了
+     * @see AdaptiveExtensionFactory
+     *
+     * AdaptiveExtensionFactory类是在创建type为ExtensionFactory的ExtensionLoader时把它给实例化的，
+     * 然后放在了type为ExtensionFactory的ExtensionLoader的cachedAdaptiveInstance属性中
+     */
     private final ExtensionFactory objectFactory;
 
     private final ConcurrentMap<Class<?>, String> cachedNames = new ConcurrentHashMap<>();
@@ -528,6 +537,24 @@ public class ExtensionLoader<T> {
         return new IllegalStateException(buf.toString());
     }
 
+    /**
+     * 开始创建在spi中的实例，主要分为如下几个步骤：
+     * 1、加载对应type的spi文件
+     * 2、如果给定的name与spi中配置的name不匹配，则直接抛出异常 ==> 说明针对当前type的ExtensionLoader中并没有在扫描出来的SPI
+     *    文件中发现相同的name
+     * 3、先从缓存EXTENSION_INSTANCES(jux下的map)中去获取，不存在则创建，存在则直接使用
+     * 4、注入实例，
+     *     注入实例包含两种:
+     *     一种是IOC的功能，另外一种是AOP的功能(Wrapper类)
+     *
+     *    这里有个注意点：就是不管这个实例是从缓存中获取的还是新建的都会再执行
+     *    注入实例的方法，同理，如果当前的实例类型为ExtensionFactory那么肯定不需要注入了，
+     *    因为它对应的ExtensionLoader的objectFactory属性为空，不需要注入。
+     *
+     *
+     * @param name
+     * @return
+     */
     @SuppressWarnings("unchecked")
     private T createExtension(String name) {
         Class<?> clazz = getExtensionClasses().get(name);
@@ -555,10 +582,13 @@ public class ExtensionLoader<T> {
     }
 
     /**
-     * 开始注入扩展类，有一个硬性条件：只有当前ExtensionLoader中objectFactory属性有值才行
-     * objectFactory属性一般是在构造方法中给填充进去的。
-     * 当ExtensionLoader维护的type为ExtensionFactory时，也就是要获取类型为ExtensionFactory的
-     * extensionLoader时，它的objectFactory对象为null，因此不需要注入
+     * 开始注入扩展类，有几个硬性条件：
+     *   1、只有当前ExtensionLoader中objectFactory属性有值才行，objectFactory属性一般是在构造方法中给填充进去的。
+     *      当ExtensionLoader维护的type为ExtensionFactory时，也就是要获取类型为ExtensionFactory的
+     *      extensionLoader时，它的objectFactory对象为null，因此不需要注入
+     *   2、当前实例有set方法，且不能为私有、不能存在@DisableInject注解
+     *
+     * 此方法其实就是IOC功能
      *
      * @param instance
      * @return
@@ -567,6 +597,7 @@ public class ExtensionLoader<T> {
         try {
             if (objectFactory != null) {
                 for (Method method : instance.getClass().getMethods()) {
+                    // 检测方法是否以 set 开头，且方法仅有一个参数，且方法访问级别为 public
                     if (isSetter(method)) {
                         /**
                          * Check {@link DisableInject} to see if we need auto injection for this property
@@ -947,7 +978,10 @@ public class ExtensionLoader<T> {
      * 主要是通过getExtensionClasses方法来处理的
      * @see ExtensionLoader#getExtensionClasses()
      *
-     *
+     * 此方法的总结大致如下：
+     * getExtensionClasses()方法主要是获取 对应type的所有SPI中配置的类
+     * 如果这些配置的类中有类被标识了@Adaptive注解，此时就直接return了，dubbo则认为自适应扩展类的逻辑已经手工完成
+     * 如果这些配置的类中都没有被@Apdative注解标识，此时dubbo就是创建自适应扩展类
      * @return
      */
     private Class<?> getAdaptiveExtensionClass() {
@@ -964,10 +998,18 @@ public class ExtensionLoader<T> {
             return cachedAdaptiveClass;
         }
 
-        // 在spi配置的实现类中若不存在adaptive类，则手动创建它
+        // 由框架创建自适应扩展类
         return cachedAdaptiveClass = createAdaptiveExtensionClass();
     }
 
+    /**
+     * 创建自适应扩展类逻辑：
+     * 1、首先校验接口中是否至少存在一个方法被@Adaptvice注解标识了
+     * @see AdaptiveClassCodeGenerator#hasAdaptiveMethod()
+     * 2、通过@Adaptive注解校验后，就会动态生成adaptive类
+     * 3、
+     * @return
+     */
     private Class<?> createAdaptiveExtensionClass() {
         String code = new AdaptiveClassCodeGenerator(type, cachedDefaultName).generate();
         ClassLoader classLoader = findClassLoader();

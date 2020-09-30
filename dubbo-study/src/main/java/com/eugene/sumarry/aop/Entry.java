@@ -22,6 +22,12 @@ public class Entry {
          SpiExtensionFactory和SpringExtensionFactory
          */
         ExtensionLoader<UserService> userServiceExtensionLoader = ExtensionLoader.getExtensionLoader(UserService.class);
+
+
+        /**
+         * 调用getExtension api时，如果是第一次创建，则会调用getExtensionClasses方法，
+         * 最终会进行扫描对应的type的spi文件
+         */
         UserService userService = userServiceExtensionLoader.getExtension("userService");
         userService.findUsers();
     }

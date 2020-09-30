@@ -27,6 +27,21 @@ import java.lang.annotation.Target;
 /**
  * Provide helpful information for {@link ExtensionLoader} to inject dependency extension instance.
  *
+ * 自适应扩展的注解，
+ *
+ * Adaptive注解可以注释在类和方法上
+ * 当标识在类中时：Dubbo不会为该类生成代理类。
+ * 注解在方法(接口方法)上时，Dubbo会为该方法生成代理逻辑。
+ *
+ * Adaptive注解标识在类中的情况很少见，在Dubbo仅有AdaptiveCompiler和AdaptiveExtensionFactory被标识了，这种情况下，表示扩展的加载逻辑由人工编码完成。
+ * 更多时候，@Adaptive注解是标识在接口的方法上，表示拓展的逻辑由框架自动生成
+ *
+ * Adaptive注解标识的地方不同，它的流程也不同。
+ * 1、注解在类上，比较简单 ==> TODO 待确认它的处理逻辑
+ * 2、注解在接口方法上，比较复杂
+ *
+ *
+ *
  * @see ExtensionLoader
  * @see URL
  */
