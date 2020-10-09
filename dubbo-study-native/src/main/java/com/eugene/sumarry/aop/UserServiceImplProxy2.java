@@ -1,5 +1,7 @@
 package com.eugene.sumarry.aop;
 
+import org.apache.dubbo.common.extension.Adaptive;
+
 /**
  * dubbo aop(dubbo的wrapper类)的前提:
  *

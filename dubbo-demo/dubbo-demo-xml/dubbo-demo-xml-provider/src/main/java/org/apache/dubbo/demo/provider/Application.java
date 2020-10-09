@@ -24,6 +24,11 @@ public class Application {
      * launch the application
      */
     public static void main(String[] args) throws Exception {
+        /**
+         * 这里涉及到解析xml文件，参考dubbo-config-spring模块的如下类
+         * @see org.apache.dubbo.config.spring.schema.DubboNamespaceHandler
+         * 基本上xml中配置的dubbo:xxx 对应的就是一个类
+         */
         ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext("spring/dubbo-provider.xml");
         context.start();
         System.in.read();

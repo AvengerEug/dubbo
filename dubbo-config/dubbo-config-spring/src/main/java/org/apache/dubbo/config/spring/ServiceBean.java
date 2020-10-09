@@ -55,6 +55,14 @@ import static org.apache.dubbo.config.spring.util.BeanFactoryUtils.addApplicatio
 /**
  * ServiceFactoryBean
  *
+ * 是spring框架和dubbo框架的桥梁，
+ * 即dubbo使用了spring的一些扩展点将dubbo与spring进行无缝对接。
+ * PS: ReferenceBean类也有相似的功能，也是dubbo与spring的桥梁
+ *
+ * ServiceBean：当我们在xml中配置一个<dubbo:service 标签时，就会对应一个ServiceBean对象，
+ * spring会对ServiceBean进行初始化，因为它继承了ServiceConfig，根据java特性，会先初始化
+ * ServiceConfig类
+ *
  * @export
  */
 public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean, DisposableBean,
@@ -70,6 +78,14 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
 
     private transient String beanName;
 
+    /**
+     * 该变量用于表示当前的Spring容器是否支持ApplicationListener ===> TODO 难道还能关闭spring的事件驱动模型？
+     * 该变量的初始值为false。Dubbo使用的spring的ApplicationContextAware扩展点来对此属性做了赋值，
+     * 因为spring的ApplicationContextAware扩展点可以获取到spring的上下文，然后通过spring的上下文
+     * 来判断spring是否支持事件驱动模型。
+     * 具体操作supportedApplicationListener变量的过程参考如下方法：
+     * @see ServiceBean#setApplicationContext(org.springframework.context.ApplicationContext)
+     */
     private transient boolean supportedApplicationListener;
 
     private ApplicationEventPublisher applicationEventPublisher;
@@ -84,6 +100,12 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
         this.service = service;
     }
 
+    /**
+     * 此方法为Spring ApplicationContextAware扩展点，
+     * 在spring执行refresh方法时，会调用到
+     * TODO
+     * @param applicationContext
+     */
     @Override
     public void setApplicationContext(ApplicationContext applicationContext) {
         this.applicationContext = applicationContext;

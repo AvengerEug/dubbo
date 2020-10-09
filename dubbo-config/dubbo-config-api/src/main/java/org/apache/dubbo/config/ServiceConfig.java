@@ -95,6 +95,9 @@ import static org.apache.dubbo.common.utils.NetUtils.isInvalidPort;
 
 /**
  * ServiceConfig
+ * 每一个<dubbo:service />标签会对应一个ServiceBean，因为ServiceBean继承ServiceConfig，
+ * 进而对应一个ServiceConfig
+ *
  *
  * @export
  */
@@ -115,6 +118,14 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
      * <p>
      * Actually，when the {@link ExtensionLoader} init the {@link Protocol} instants,it will automatically wraps two
      * layers, and eventually will get a <b>ProtocolFilterWrapper</b> or <b>ProtocolListenerWrapper</b>
+     *
+     * 就是Dubbo自适应扩展机制，因为在Dubbo框架中没有显式的指定Protocol的adaptive类，因此它的adaptive类由dubbo框架动态生成，
+     * 参考官网的 《自适应扩展机制》文档：
+     * @link http://dubbo.apache.org/zh-cn/docs/source_code_guide/adaptive-extension.html
+     *
+     * 所以此protocol属性是一个动态生成的自适应扩展类对象，其中会为export和refer方法进行扩展，
+     * 因为只有这两个方法有@Adaptive注解和URL参数，剩下的方法应该直接抛异常
+     *
      */
     private static final Protocol protocol = ExtensionLoader.getExtensionLoader(Protocol.class).getAdaptiveExtension();
 

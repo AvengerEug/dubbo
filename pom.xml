@@ -149,7 +149,7 @@
         <module>dubbo-metadata-report</module>
         <module>dubbo-configcenter</module>
         <module>dubbo-dependencies</module>
-        <module>dubbo-study</module>
+        <module>dubbo-study-native</module>
     </modules>
 
     <dependencyManagement>

@@ -18,6 +18,7 @@ package org.apache.dubbo.common.extension;
 
 import org.apache.dubbo.common.URL;
 import org.apache.dubbo.common.extension.factory.AdaptiveExtensionFactory;
+import org.apache.dubbo.common.extension.factory.SpiExtensionFactory;
 import org.apache.dubbo.common.extension.support.ActivateComparator;
 import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
@@ -140,7 +141,9 @@ public class ExtensionLoader<T> {
     private final Holder<Object> cachedAdaptiveInstance = new Holder<>();
 
     /**
-     * 缓存adaptive的class类
+     * 缓存adaptive的class类(前提：是会构建扩展类),
+     * 若指定Type的spi中配置的实现类中有被@Adaptive注解标识，则使用它，
+     * 否则Dubbo将会动态生成自适应扩展类
      */
     private volatile Class<?> cachedAdaptiveClass = null;
 
@@ -669,6 +672,7 @@ public class ExtensionLoader<T> {
             }
             injectExtension(instance);
             Set<Class<?>> wrapperClasses = cachedWrapperClasses;
+            // 获取所有的wrapper类，并挨个调用他们的构造方法，并挨个进行依赖注入
             if (CollectionUtils.isNotEmpty(wrapperClasses)) {
                 for (Class<?> wrapperClass : wrapperClasses) {
                     instance = injectExtension((T) wrapperClass.getConstructor(type).newInstance(instance));
@@ -710,7 +714,14 @@ public class ExtensionLoader<T> {
                             continue;
                         }
                         try {
+                            // 获取方法后面的签名，eg: 方法名为：setVersion, 调用此方法后，将返回version
                             String property = getSetterProperty(method);
+                            /**
+                             * 注入进去的对象主要由如下代码决定，其中objectFactory的属性为adaptiveExtensionFactory
+                             * 其中内部维护了两个ExtensionFactory，分别为：
+                             * @see SpiExtensionFactory  -> 普通情况下，使用的是此ExtensionFactory，且调用getExtesion方法时，返回的是一个adaptiveExtension，此种情况下，属性名没什么作用
+                             * @see org.apache.dubbo.config.spring.extension.SpringExtensionFactory  -> 用于从 Spring 的 IOC 容器中获取所需的拓展
+                             */
                             Object object = objectFactory.getExtension(pt, property);
                             if (object != null) {
                                 method.invoke(instance, object);
