@@ -5,6 +5,7 @@ import org.apache.dubbo.common.extension.ExtensionLoader;
 public class Entry {
 
     public static void main(String[] args) {
+        // 使用指定的日志文件，同时要添加log4j2.xml配置文件
         System.setProperty("dubbo.application.logger", "log4j2");
         /*
          此行代码执行完成后，会初始化type为ExtensionFactory的ExtensionLoader，其中会扫描classpath下的所有叫
@@ -23,12 +24,12 @@ public class Entry {
          */
         ExtensionLoader<UserService> userServiceExtensionLoader = ExtensionLoader.getExtensionLoader(UserService.class);
 
-
         /**
          * 调用getExtension api时，如果是第一次创建，则会调用getExtensionClasses方法，
          * 最终会进行扫描对应的type的spi文件
          */
         UserService userService = userServiceExtensionLoader.getExtension("userService");
         userService.findUsers();
+
     }
 }

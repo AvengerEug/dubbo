@@ -69,20 +69,33 @@ public class ExtensionLoader<T> {
 
     private static final Logger logger = LoggerFactory.getLogger(ExtensionLoader.class);
 
+    /**
+     * 此三个属性是在扫描spi文件时的三个基础目录
+     */
     private static final String SERVICES_DIRECTORY = "META-INF/services/";
-
     private static final String DUBBO_DIRECTORY = "META-INF/dubbo/";
-
     private static final String DUBBO_INTERNAL_DIRECTORY = DUBBO_DIRECTORY + "internal/";
 
+    /**
+     * 以逗号分隔的正则
+     */
     private static final Pattern NAME_SEPARATOR = Pattern.compile("\\s*[,]+\\s*");
 
+    /**
+     * 存放所有的ExtensionLoader，static修饰的，在JVM中放在方法区，所有的ExtensionLoader共享
+     */
     private static final ConcurrentMap<Class<?>, ExtensionLoader<?>> EXTENSION_LOADERS = new ConcurrentHashMap<>();
 
+    /**
+     * 存放SPI中配置的所有实例，所有的ExtensionLoader共享
+     */
     private static final ConcurrentMap<Class<?>, Object> EXTENSION_INSTANCES = new ConcurrentHashMap<>();
 
     // ==============================
 
+    /**
+     * 当前ExtensionLoader维护的type，一个@SPI修饰的接口，对应一个ExtensionLoader
+     */
     private final Class<?> type;
 
     /**
@@ -95,21 +108,75 @@ public class ExtensionLoader<T> {
      */
     private final ExtensionFactory objectFactory;
 
+    /**
+     * 在解析SPI文件时，缓存的名字，基本上就是SPI文件中配置的东西
+     * key为class，value为name
+     */
     private final ConcurrentMap<Class<?>, String> cachedNames = new ConcurrentHashMap<>();
 
+    /**
+     * 使用包装器设计模式，定义了一个抽象的holder(可以把它理解成一个口袋，里面可以存放任意的东西)
+     * 在此处，泛型为map，其中map里面存储的是SPI文件中配置的东西
+     * 与cachedNames相反，这里的key为name，value为class
+     */
     private final Holder<Map<String, Class<?>>> cachedClasses = new Holder<>();
 
+    /**
+     * 缓存spi实现类中被@Activate注解标识的实现类
+     * @see Activate
+     */
     private final Map<String, Object> cachedActivates = new ConcurrentHashMap<>();
+
+    /**
+     * 缓存spi的所有实现类，其中key为spi中配置的name，value为对应的实例
+     */
     private final ConcurrentMap<String, Holder<Object>> cachedInstances = new ConcurrentHashMap<>();
+
+    /**
+     * 缓存当前实现ExtensionLoader对应的adaptive类，只有调用了
+     * @org.apache.dubbo.common.extension.ExtensionLoader#getAdaptiveExtension()
+     * 方法时，才会缓存至此属性
+     */
     private final Holder<Object> cachedAdaptiveInstance = new Holder<>();
+
+    /**
+     * 缓存adaptive的class类
+     */
     private volatile Class<?> cachedAdaptiveClass = null;
+
+    /**
+     * 缓存@SPI注解的值，若有多个，则取第一个
+     */
     private String cachedDefaultName;
+
+    /**
+     * 保存创建adaptive代理类的错误信息
+     */
     private volatile Throwable createAdaptiveInstanceError;
 
+    /**
+     * 缓存所有的wrapper类信息
+     */
     private Set<Class<?>> cachedWrapperClasses;
 
     private Map<String, IllegalStateException> exceptions = new ConcurrentHashMap<>();
 
+    /**
+     * 私有构造方法，此构造方法比较重要，基本上都是在此步骤对当前ExtensionLoader对应的SPI文件进行解析，
+     * 大致总结下构造方法做的事情：
+     *
+     * 1、绑定当前ExtensionLoader负责的Type
+     * 2、为当前ExtensionLoader填充objectFactory属性
+     *    此属性比较特殊，要视情况而定。
+     *    2.1、如果当前的ExtensionLoader对应的Type是org.apache.dubbo.common.extension.ExtensionFactory，
+     *         那么它的objectFactory就是null。
+     *
+     *    2.2、如果当前的ExtensionLoader对应的Type是非org.apache.dubbo.common.extension.ExtensionFactory类，
+     *         那么它的objectFactory就是ExtensionFactory的扩展类。而对于ExtensionFactory类而言，dubbo框架
+     *         在它的实现类中，org.apache.dubbo.common.extension.factory.AdaptiveExtensionFactory类被
+     *          @Adaptive注解修饰了，因此dubbo框架不会去生成代理类，而是直接选择AdaptiveExtensionFactory
+     *          作为代理类
+     */
     private ExtensionLoader(Class<?> type) {
         this.type = type;
         objectFactory = (type == ExtensionFactory.class ? null : ExtensionLoader.getExtensionLoader(ExtensionFactory.class).getAdaptiveExtension());
@@ -485,6 +552,39 @@ public class ExtensionLoader<T> {
      * @see ExtensionLoader#createAdaptiveExtension()
      * 的这段代码：
      * ExtensionLoader.getExtensionLoader(ExtensionFactory.class).getAdaptiveExtension()
+     *
+     * 如果当前的ExtensionLoader对应的Type的实现类中，不存在一个被@Adaptive注解标识的类的话，此时dubbo框架会动态的
+     * 生成一个adaptive类，目的就是为了在方法中能够根据传入的参数来决定使用具体的实现类。其中，这个代理类的逻辑大致为如下：
+     * 以官方的车轮制造厂接口 WheelMaker为例：
+     * public interface WheelMaker {
+     *    Wheel makeWheel(URL url);
+     * }
+     *
+     * 根据此接口，生成的adaptive代理类为(能根据传入的参数来决定使用哪一个WheelMaker)：
+     * public class AdaptiveWheelMaker implements WheelMaker {
+     *     public Wheel makeWheel(URL url) {
+     *         if (url == null) {
+     *             throw new IllegalArgumentException("url == null");
+     *         }
+     *
+     *     // 1.从 URL 中获取 WheelMaker 名称
+     *     String wheelMakerName = url.getParameter("Wheel.maker");
+     *     if (wheelMakerName == null) {
+     *         throw new IllegalArgumentException("wheelMakerName == null");
+     *     }
+     *
+     *     // 2.通过 SPI 加载具体的 WheelMaker
+     *     WheelMaker wheelMaker = ExtensionLoader.getExtensionLoader(WheelMaker.class).getExtension(wheelMakerName);
+     *
+     *     // 3.调用目标方法
+     *     return wheelMaker.makeWheel(url);
+     *     }
+     * }
+     *
+     * 如果当前的ExtensionLoader对应的Type的实现类中，存在一个(如果有多个则抛异常)被@Adaptive注解标识的类的话，此时就会将此类实例化，
+     * 并赋值给objectFactory属性，最具有代表意义的就是type为org.apache.dubbo.common.extension.ExtensionFactory的
+     * ExtensionLoader，它内部维护的objectFactory就是org.apache.dubbo.common.extension.factory.AdaptiveExtensionFactory
+     *
      */
     @SuppressWarnings("unchecked")
     public T getAdaptiveExtension() {
@@ -663,31 +763,6 @@ public class ExtensionLoader<T> {
     }
 
     /**
-     * 先从缓存中获取，缓存不存在则直接加载SPI文件(只加载当前类相关的SPI文件)，
-     * 打个比方：如果当前类(ExtensionLoader)type属性是 com.eugene.sumarry.aop.UserService
-     * 那么此时加载的就是名字为com.eugene.sumarry.aop.UserService的spi文件
-     * @see  ExtensionLoader#loadExtensionClasses()
-     *
-     * 执行完loadExtensionClasses后，会把加载出来的一些Class对象(所有实现type属性对应的类的对象)
-     * 添加到Map中(其中key为spi文件中配置的key，value为spi对应的value)，并将它缓存起来
-     *
-     * @return 返回的是一个map，其中key为spi中配置的name，value为spi中配置的value，同时当前ExtensionLoader中的cachedClasses属性中有值了
-     */
-    private Map<String, Class<?>> getExtensionClasses() {
-        Map<String, Class<?>> classes = cachedClasses.get();
-        if (classes == null) {
-            synchronized (cachedClasses) {
-                classes = cachedClasses.get();
-                if (classes == null) {
-                    classes = loadExtensionClasses();
-                    cachedClasses.set(classes);
-                }
-            }
-        }
-        return classes;
-    }
-
-    /**
      * 官方给的注释：synchronized in getExtensionClasses
      *
      * 加载SPI的class类
@@ -722,6 +797,34 @@ public class ExtensionLoader<T> {
         loadDirectory(extensionClasses, SERVICES_DIRECTORY, type.getName());
         loadDirectory(extensionClasses, SERVICES_DIRECTORY, type.getName().replace("org.apache", "com.alibaba"));
         return extensionClasses;
+    }
+
+    /**
+     * 先从缓存中获取，缓存不存在则直接加载SPI文件(只加载当前类相关的SPI文件)，
+     * 打个比方：如果当前类(ExtensionLoader)type属性是 com.eugene.sumarry.aop.UserService
+     * 那么此时加载的就是名字为com.eugene.sumarry.aop.UserService的spi文件
+     * @see  ExtensionLoader#loadExtensionClasses()
+     *
+     * 执行完loadExtensionClasses后，会把加载出来的一些Class对象(所有实现type属性对应的类的对象)
+     * 添加到Map中(其中key为spi文件中配置的key，value为spi对应的value)，并将它缓存起来。
+     *
+     * 此方法是加载spi文件的路口，通常是通过
+     * getExtension和getAdaptiveExtension这两个api来触发此方法进而完成对spi的加载的。
+     *
+     * @return 返回的是一个map，其中key为spi中配置的name，value为spi中配置的value，同时当前ExtensionLoader中的cachedClasses属性中有值了
+     */
+    private Map<String, Class<?>> getExtensionClasses() {
+        Map<String, Class<?>> classes = cachedClasses.get();
+        if (classes == null) {
+            synchronized (cachedClasses) {
+                classes = cachedClasses.get();
+                if (classes == null) {
+                    classes = loadExtensionClasses();
+                    cachedClasses.set(classes);
+                }
+            }
+        }
+        return classes;
     }
 
     /**

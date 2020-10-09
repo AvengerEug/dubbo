@@ -113,7 +113,7 @@ public class AdaptiveClassCodeGenerator {
          *     throw new UnsupportedOperationException(
          *             "method public abstract void com.alibaba.dubbo.rpc.Protocol.destroy() of interface com.alibaba.dubbo.rpc.Protocol is not adaptive method!");
          *
-         * 
+         *
          *
          */
         Method[] methods = type.getMethods();
