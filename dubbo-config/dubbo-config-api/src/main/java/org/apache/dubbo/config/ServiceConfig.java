@@ -125,7 +125,6 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
      *
      * 所以此protocol属性是一个动态生成的自适应扩展类对象，其中会为export和refer方法进行扩展，
      * 因为只有这两个方法有@Adaptive注解和URL参数，剩下的方法应该直接抛异常
-     *
      */
     private static final Protocol protocol = ExtensionLoader.getExtensionLoader(Protocol.class).getAdaptiveExtension();
 
@@ -377,6 +376,7 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
     }
 
     public synchronized void export() {
+        // 检查参数
         checkAndUpdateSubConfigs();
 
         if (!shouldExport()) {
@@ -386,6 +386,7 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         if (shouldDelay()) {
             DELAY_EXPORT_EXECUTOR.schedule(this::doExport, getDelay(), TimeUnit.MILLISECONDS);
         } else {
+            // 组装URL
             doExport();
         }
     }
@@ -810,6 +811,9 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         return port;
     }
 
+    /**
+     * 构建serviceConfig中的一些配置
+     */
     private void completeCompoundConfigs() {
         if (provider != null) {
             if (application == null) {

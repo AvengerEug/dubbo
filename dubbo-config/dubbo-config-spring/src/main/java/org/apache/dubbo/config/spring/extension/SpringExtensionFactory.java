@@ -22,6 +22,7 @@ import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
 import org.apache.dubbo.common.utils.ConcurrentHashSet;
 import org.apache.dubbo.config.DubboShutdownHook;
+import org.apache.dubbo.config.spring.ServiceBean;
 import org.apache.dubbo.config.spring.util.BeanFactoryUtils;
 
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
@@ -43,6 +44,13 @@ public class SpringExtensionFactory implements ExtensionFactory {
     private static final Set<ApplicationContext> CONTEXTS = new ConcurrentHashSet<ApplicationContext>();
     private static final ApplicationListener SHUTDOWN_HOOK_LISTENER = new ShutdownHookListener();
 
+    /**
+     * spring上下文是在此方法中被添加进来了，
+     * 利用了Spring的BeanPostProcessor后置处理器实现的
+     *
+     * @see ServiceBean#setApplicationContext(org.springframework.context.ApplicationContext)
+     * @param context
+     */
     public static void addApplicationContext(ApplicationContext context) {
         CONTEXTS.add(context);
         if (context instanceof ConfigurableApplicationContext) {

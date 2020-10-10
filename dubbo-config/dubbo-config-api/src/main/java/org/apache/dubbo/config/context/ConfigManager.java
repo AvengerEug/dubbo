@@ -85,6 +85,11 @@ public class ConfigManager {
     private Map<String, ProviderConfig> providers = new ConcurrentHashMap<>();
     private Map<String, ConsumerConfig> consumers = new ConcurrentHashMap<>();
 
+    /**
+     * 饿汉式单例模式，此类管理了当前应用的所有配置，包括全局的application、monitor、module、configCenter
+     * 以及对于单个服务的协议、注册中心、提供者、消费者
+     * @return
+     */
     public static ConfigManager getInstance() {
         return CONFIG_MANAGER;
     }

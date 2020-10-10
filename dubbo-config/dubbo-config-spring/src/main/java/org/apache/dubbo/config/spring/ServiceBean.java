@@ -102,14 +102,18 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
 
     /**
      * 此方法为Spring ApplicationContextAware扩展点，
-     * 在spring执行refresh方法时，会调用到
-     * TODO
+     * 在spring执行refresh方法的初始化bean方法时，会触发进行后置处理器BeanPostProcessor的回调，
+     * 最主要是如下后置处理器的回调，最终会调用到此方法来。
+     * 大致就是bean创建后, 调用BeanPostProcessor的postProcessBeforeInitialization方法，进而对ApplicationContext进行填充
+     * @see org.springframework.context.support.ApplicationContextAwareProcessor
+     * TODO 问题来了，那不是每个serviceBean都会调用SpringExtensionFactory的applicationContext方法？虽然方法内部是用了一个set来存储，可以去重，但是有必要这么设计吗？
      * @param applicationContext
      */
     @Override
     public void setApplicationContext(ApplicationContext applicationContext) {
         this.applicationContext = applicationContext;
         SpringExtensionFactory.addApplicationContext(applicationContext);
+        //TODO 怎么从这里调用到org.apache.dubbo.config.spring.util.BeanFactoryUtils.addApplicationListener取得？
         supportedApplicationListener = addApplicationListener(applicationContext, this);
     }
 
@@ -127,16 +131,27 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
         return service;
     }
 
+    /**
+     * 服务导出的入口：spring容器初始化完成，发布refresh事件
+     * @param event
+     */
     @Override
     public void onApplicationEvent(ContextRefreshedEvent event) {
+        // 判断是否满足导出服务条件  => 服务未导出
         if (!isExported() && !isUnexported()) {
             if (logger.isInfoEnabled()) {
                 logger.info("The service ready on spring started. service: " + getInterface());
             }
+            // 服务导出过程使用了责任链模式，一层一层的调用父类相同的方法，由每一个类专心处理自己的事
             export();
         }
     }
 
+    /**
+     * 利用spring InitializingBean的扩展点，对当前服务配置的一些属性进行手动注入，
+     * eg: 一个服务对应的provider、application、module等等
+     * @throws Exception
+     */
     @Override
     @SuppressWarnings({"unchecked", "deprecation"})
     public void afterPropertiesSet() throws Exception {
@@ -187,7 +202,7 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
                 }
             }
         }
-        if (getModule() == null
+         if (getModule() == null
                 && (getProvider() == null || getProvider().getModule() == null)) {
             Map<String, ModuleConfig> moduleConfigMap = applicationContext == null ? null : BeanFactoryUtils.beansOfTypeIncludingAncestors(applicationContext, ModuleConfig.class, false, false);
             if (moduleConfigMap != null && moduleConfigMap.size() > 0) {
@@ -355,6 +370,13 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
      */
     @Override
     public void export() {
+        // 调用父类的export方法， 处于服务导出中三个阶段的第一个阶段：检查参数和组装URL
+        /**
+         * 检查参数
+         * @see ServiceConfig#checkAndUpdateSubConfigs()
+         * 组装URL
+         * @see ServiceConfig#doExport()
+         */
         super.export();
         // Publish ServiceBeanExportedEvent
         publishExportEvent();
