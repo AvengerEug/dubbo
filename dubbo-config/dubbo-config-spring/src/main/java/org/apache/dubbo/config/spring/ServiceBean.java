@@ -79,6 +79,14 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
     private transient String beanName;
 
     /**
+     *
+     * 因为此类实现了ApplicationContextAware和ApplicationEventPublisherAware接口
+     * 在ApplicationEventPublisherAware中的postProcessBeforeInitialization方法中会对当前bean填充一些
+     * spring上下文相关的对象，详看如下方法
+     * @see org.springframework.context.support.ApplicationContextAwareProcessor#invokeAwareInterfaces(java.lang.Object)
+     * 而此属性的填充就是因为此bean实现了ApplicationContextAware接口
+     *
+     *
      * 该变量用于表示当前的Spring容器是否支持ApplicationListener ===> TODO 难道还能关闭spring的事件驱动模型？
      * 该变量的初始值为false。Dubbo使用的spring的ApplicationContextAware扩展点来对此属性做了赋值，
      * 因为spring的ApplicationContextAware扩展点可以获取到spring的上下文，然后通过spring的上下文
@@ -88,6 +96,12 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
      */
     private transient boolean supportedApplicationListener;
 
+    /**
+     * 在ApplicationEventPublisherAware中的postProcessBeforeInitialization方法中会对当前bean填充一些
+     * spring上下文相关的对象，详看如下方法
+     * @see org.springframework.context.support.ApplicationContextAwareProcessor#invokeAwareInterfaces(java.lang.Object)
+     * 而此属性的填充就是因为此bean实现了ApplicationEventPublisherAware接口
+     */
     private ApplicationEventPublisher applicationEventPublisher;
 
     public ServiceBean() {
@@ -95,6 +109,13 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
         this.service = null;
     }
 
+    /**
+     * Spring在创建bean时肯定会选择一个构造方法来执行，
+     * 具体使用哪一个肯定在构建ServiceBean的BeanDefinition时来决定的，
+     * 这个待处理
+     * TODO 专门写一篇博客来描述spring在构建ServiceBean时如何来选择构造方法的
+     * @param service
+     */
     public ServiceBean(Service service) {
         super(service);
         this.service = service;
@@ -113,7 +134,7 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
     public void setApplicationContext(ApplicationContext applicationContext) {
         this.applicationContext = applicationContext;
         SpringExtensionFactory.addApplicationContext(applicationContext);
-        //TODO 怎么从这里调用到org.apache.dubbo.config.spring.util.BeanFactoryUtils.addApplicationListener取得？
+        //TODO 怎么从这里调用到org.apache.dubbo.config.spring.util.BeanFactoryUtils.addApplicationListener取得？ ===> 看53行代码，它把静态方法给导入进来了
         supportedApplicationListener = addApplicationListener(applicationContext, this);
     }
 
