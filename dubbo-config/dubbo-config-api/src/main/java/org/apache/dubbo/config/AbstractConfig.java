@@ -545,6 +545,13 @@ public abstract class AbstractConfig implements Serializable {
     /**
      * TODO: Currently, only support overriding of properties explicitly defined in Config class, doesn't support
      * overriding of customized parameters stored in 'parameters'.
+     *
+     * 覆盖配置，因为Dubbo支持多种渠道获取配置，同时他们有优先级关系
+     * 优先级关系如下：
+     * 1、系统属性(-D参数)
+     * 2、配置中心
+     * 3、spring的xml方式或者注解的方式配置
+     * 4、dubbo.properties文件
      */
     public void refresh() {
         try {

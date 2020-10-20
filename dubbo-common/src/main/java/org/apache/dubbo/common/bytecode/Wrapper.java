@@ -100,6 +100,8 @@ public abstract class Wrapper {
     /**
      * get wrapper.
      *
+     * 传入的 Class 对象进行解析，拿到诸如类方法，类成员变量等信息。以及生成 invokeMethod 方法代码和其他一些方法代码
+     *
      * @param c Class instance.
      * @return Wrapper instance(not null).
      */
@@ -116,12 +118,14 @@ public abstract class Wrapper {
         Wrapper ret = WRAPPER_MAP.get(c);
         if (ret == null) {
             ret = makeWrapper(c);
+            // 若想查看ret类的源码 --> 参考此文章：https://www.cnblogs.com/tlj2018/articles/11865002.html
             WRAPPER_MAP.put(c, ret);
         }
         return ret;
     }
 
     private static Wrapper makeWrapper(Class<?> c) {
+        // 校验传入参数c是否为基础数据类型，若是则抛出异常
         if (c.isPrimitive()) {
             throw new IllegalArgumentException("Can not create wrapper for primitive type: " + c);
         }
@@ -129,20 +133,42 @@ public abstract class Wrapper {
         String name = c.getName();
         ClassLoader cl = ClassUtils.getClassLoader(c);
 
+        // c1 用于存储 setPropertyValue 方法代码
         StringBuilder c1 = new StringBuilder("public void setPropertyValue(Object o, String n, Object v){ ");
+        // c2 用于存储 getPropertyValue 方法代码
         StringBuilder c2 = new StringBuilder("public Object getPropertyValue(Object o, String n){ ");
+        // c3 用户存储 invokeMethod 方法代码
         StringBuilder c3 = new StringBuilder("public Object invokeMethod(Object o, String n, Class[] p, Object[] v) throws " + InvocationTargetException.class.getName() + "{ ");
 
+        /**
+         * 主要生成的是下段代码
+         * ---------------------------------------------------------------
+         *     org.apache.dubbo.demo.DemoService w;
+         *     try {
+         *         w = ((org.apache.dubbo.demo.DemoService)$1);
+         *     } catch(Throwable e) {
+         *         throw new IllegalArgumentException(e);
+         *     }
+         * ---------------------------------------------------------------
+         */
         c1.append(name).append(" w; try{ w = ((").append(name).append(")$1); }catch(Throwable e){ throw new IllegalArgumentException(e); }");
         c2.append(name).append(" w; try{ w = ((").append(name).append(")$1); }catch(Throwable e){ throw new IllegalArgumentException(e); }");
         c3.append(name).append(" w; try{ w = ((").append(name).append(")$1); }catch(Throwable e){ throw new IllegalArgumentException(e); }");
 
+        // pts 用于存储成员变量名和类型
         Map<String, Class<?>> pts = new HashMap<>(); // <property name, property types>
+
+        // ms 用于存储方法描述信息（可理解为方法签名）及 Method 实例
         Map<String, Method> ms = new LinkedHashMap<>(); // <method desc, Method instance>
+
+        // mns 为方法名列表
         List<String> mns = new ArrayList<>(); // method names.
+
+        // dmns 用于存储“定义在当前类中的方法”的名称
         List<String> dmns = new ArrayList<>(); // declaring method names.
 
         // get all public field.
+        // 获取 public 访问级别的字段，并为所有字段生成条件判断语句(忽略静态和transient变量)
         for (Field f : c.getFields()) {
             String fn = f.getName();
             Class<?> ft = f.getType();
@@ -258,6 +284,7 @@ public abstract class Wrapper {
         cc.addMethod(c3.toString());
 
         try {
+            // 可以在此处添加断点，查看wrapper类生成的代码
             Class<?> wc = cc.toClass();
             // setup static field.
             wc.getField("pts").set(null, pts);

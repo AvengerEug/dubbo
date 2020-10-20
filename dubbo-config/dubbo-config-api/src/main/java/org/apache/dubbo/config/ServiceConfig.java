@@ -40,6 +40,7 @@ import org.apache.dubbo.rpc.ProxyFactory;
 import org.apache.dubbo.rpc.cluster.ConfiguratorFactory;
 import org.apache.dubbo.rpc.model.ApplicationModel;
 import org.apache.dubbo.rpc.model.ProviderModel;
+import org.apache.dubbo.rpc.proxy.javassist.JavassistProxyFactory;
 import org.apache.dubbo.rpc.service.GenericService;
 import org.apache.dubbo.rpc.support.ProtocolUtils;
 
@@ -125,12 +126,26 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
      *
      * 所以此protocol属性是一个动态生成的自适应扩展类对象，其中会为export和refer方法进行扩展，
      * 因为只有这两个方法有@Adaptive注解和URL参数，剩下的方法应该直接抛异常
+     *
+     * 自适应扩展非常重要，只有了解自适应扩展的一些逻辑才能在看源码的时候不那么艰难
+     * TODO: 在阅读源码的过程中，遇到一个Dubbo自动生成的自适应扩展类，就给他记录一下。比如目前所知道的Dubbo自动生成的自适应扩展类的Protocol就非常重要，需要记录起来
+     *
+     * 其中在export方法中，因为参数是Invoke，所以方法一开始的逻辑为如下所示：
+     * export:
+     * if (arg0 == null)
+     *     throw new IllegalArgumentException("com.alibaba.dubbo.rpc.Invoker argument == null");
+     * if (arg0.getUrl() == null)
+     *     throw new IllegalArgumentException("com.alibaba.dubbo.rpc.Invoker argument getUrl() == null");
+     * com.alibaba.dubbo.common.URL url = arg0.getUrl();
+     *
      */
     private static final Protocol protocol = ExtensionLoader.getExtensionLoader(Protocol.class).getAdaptiveExtension();
 
     /**
      * A {@link ProxyFactory} implementation that will generate a exported service proxy,the JavassistProxyFactory is its
      * default implementation
+     *
+     * @see JavassistProxyFactory
      */
     private static final ProxyFactory PROXY_FACTORY = ExtensionLoader.getExtensionLoader(ProxyFactory.class).getAdaptiveExtension();
 
@@ -476,16 +491,27 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         }
     }
 
+    /**
+     * 为协议对象创建对应的URL参数
+     *
+     *
+     *
+     * @param protocolConfig
+     * @param registryURLs
+     */
     private void doExportUrlsFor1Protocol(ProtocolConfig protocolConfig, List<URL> registryURLs) {
         String name = protocolConfig.getName();
+        // 如果协议名为空，或空串，则将协议名变量设置为 dubbo
         if (StringUtils.isEmpty(name)) {
             name = DUBBO;
         }
 
         Map<String, String> map = new HashMap<String, String>();
+        // 添加 side、版本、时间戳以及进程号等信息到 map 中
         map.put(SIDE_KEY, PROVIDER_SIDE);
 
         appendRuntimeParameters(map);
+        // 通过反射将对象的字段信息添加到 map 中
         appendParameters(map, metrics);
         appendParameters(map, application);
         appendParameters(map, module);
@@ -494,20 +520,29 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         appendParameters(map, provider);
         appendParameters(map, protocolConfig);
         appendParameters(map, this);
+
+        // methods 为 MethodConfig 集合，MethodConfig 中存储了 <dubbo:method> 标签的配置信息
         if (CollectionUtils.isNotEmpty(methods)) {
             for (MethodConfig method : methods) {
+                // 添加 MethodConfig 对象的字段信息到 map 中，键 = 方法名.属性名。
+                // 比如存储 <dubbo:method name="sayHello" retries="2"> 对应的 MethodConfig，
+                // 键 = sayHello.retries，map = {"sayHello.retries": 2, "xxx": "yyy"}
                 appendParameters(map, method, method.getName());
                 String retryKey = method.getName() + ".retry";
                 if (map.containsKey(retryKey)) {
                     String retryValue = map.remove(retryKey);
+                    // 检测 MethodConfig retry 是否为 false，若是，则设置重试次数为0
                     if ("false".equals(retryValue)) {
                         map.put(method.getName() + ".retries", "0");
                     }
                 }
+
+                // 获取 ArgumentConfig 列表
                 List<ArgumentConfig> arguments = method.getArguments();
                 if (CollectionUtils.isNotEmpty(arguments)) {
                     for (ArgumentConfig argument : arguments) {
                         // convert argument type
+                        // 检测 type 属性是否为空，或者空串（分支1 ⭐️）
                         if (argument.getType() != null && argument.getType().length() > 0) {
                             Method[] methods = interfaceClass.getMethods();
                             // visit all methods
@@ -519,15 +554,21 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                                         Class<?>[] argtypes = methods[i].getParameterTypes();
                                         // one callback in the method
                                         if (argument.getIndex() != -1) {
+                                            // 检测 ArgumentConfig 中的 type 属性与方法参数列表
+                                            // 中的参数名称是否一致，不一致则抛出异常(分支2 ⭐️)
                                             if (argtypes[argument.getIndex()].getName().equals(argument.getType())) {
+                                                // 添加 ArgumentConfig 字段信息到 map 中，
+                                                // 键前缀 = 方法名.index，比如:
+                                                // map = {"sayHello.3": true}
                                                 appendParameters(map, argument, method.getName() + "." + argument.getIndex());
                                             } else {
                                                 throw new IllegalArgumentException("Argument config error : the index attribute and type attribute not match :index :" + argument.getIndex() + ", type:" + argument.getType());
                                             }
-                                        } else {
+                                        } else { // 分支3 ⭐️
                                             // multiple callbacks in the method
                                             for (int j = 0; j < argtypes.length; j++) {
                                                 Class<?> argclazz = argtypes[j];
+                                                // 从参数类型列表中查找类型名称为 argument.type 的参数
                                                 if (argclazz.getName().equals(argument.getType())) {
                                                     appendParameters(map, argument, method.getName() + "." + j);
                                                     if (argument.getIndex() != -1 && argument.getIndex() != j) {
@@ -539,7 +580,9 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                                     }
                                 }
                             }
-                        } else if (argument.getIndex() != -1) {
+                        // 用户未配置 type 属性，但配置了 index 属性，且 index != -1
+                        } else if (argument.getIndex() != -1) {// 分支4 ⭐️
+                            // 添加 ArgumentConfig 字段信息到 map 中
                             appendParameters(map, argument, method.getName() + "." + argument.getIndex());
                         } else {
                             throw new IllegalArgumentException("Argument config must set index or type attribute.eg: <dubbo:argument index='0' .../> or <dubbo:argument type=xxx .../>");
@@ -559,32 +602,51 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                 map.put(REVISION_KEY, revision);
             }
 
+            // 为接口生成包裹类 Wrapper，Wrapper 中包含了接口的详细信息，比如接口方法名数组，字段信息等
             String[] methods = Wrapper.getWrapper(interfaceClass).getMethodNames();
             if (methods.length == 0) {
                 logger.warn("No method found in service interface " + interfaceClass.getName());
                 map.put(METHODS_KEY, ANY_VALUE);
             } else {
+                // 添加方法名到 map 中，如果包含多个方法名，则用逗号隔开，比如 method = init,destroy
                 map.put(METHODS_KEY, StringUtils.join(new HashSet<String>(Arrays.asList(methods)), ","));
             }
         }
+
+        // 添加 token 到 map 中
         if (!ConfigUtils.isEmpty(token)) {
             if (ConfigUtils.isDefault(token)) {
+                // 随机生成 token
                 map.put(TOKEN_KEY, UUID.randomUUID().toString());
             } else {
                 map.put(TOKEN_KEY, token);
             }
         }
-        // export service
+        // export service  如果dubbo:protocol标签未配置host，则默认使用本机
         String host = this.findConfigedHosts(protocolConfig, registryURLs, map);
+        // 如果dubbo:protocol标签未配置host，则默认使用dubbo协议的20880端口
         Integer port = this.findConfigedPorts(protocolConfig, name, map);
         URL url = new URL(name, host, port, getContextPath(protocolConfig).map(p -> p + "/" + path).orElse(path), map);
 
+        /**
+         *
+         *
+         * 可以通过在spi中配置如下类，来实现对url的更新
+         * @see AbstractConfigurator
+         *
+         * TODO 暂不知道这个是干啥用的，待总结
+         */
         if (ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
                 .hasExtension(url.getProtocol())) {
             url = ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
                     .getExtension(url.getProtocol()).getConfigurator(url).configure(url);
         }
 
+        /**
+         * scope = none，不导出服务  --> 注意：这里的none为none字符串而不是null对象，这个none由配置文件中配置
+         * scope != remote，导出到本地
+         * scope != local，导出到远程
+         */
         String scope = url.getParameter(SCOPE_KEY);
         // don't export when none is configured
         if (!SCOPE_NONE.equalsIgnoreCase(scope)) {
@@ -655,6 +717,23 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                 .setHost(LOCALHOST_VALUE)
                 .setPort(0)
                 .build();
+        /**
+         * PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, local))代码主要是
+         * 使用如下方法来为ref(<dubbo:service标签中配置的bean，即引用的服务名)属性创建invoker对象，其中invoke对象中存在url参数。
+         * @see JavassistProxyFactory#getInvoker(java.lang.Object, java.lang.Class, org.apache.dubbo.common.URL)
+         *
+         * 这个protocol为dubbo自己生成的自适应扩展，对export和refer方法做了增强。
+         *
+         * 因此此段代码的主要含义为：
+         * 为当前引用的服务(DemoServiceImpl)生成invoke对象，其中invoke对象包含url参数。
+         * 然后通过protocol来调用export方法，因为protocol属性是Dubbo自己生成的自适应类。
+         * 所以它会对内部被@Adaptive注解修饰的方法进行增强，逻辑为：
+         * 根据传入的url参数(如果不是url参数，那么它内部肯定有一个url属性)的参数来获取
+         * 具体的protocol。这个具体的逻辑就要根据protocol的自适应扩展类来实现了，目前
+         * 来说：它内部的的实现是根据url的protocol来决定的，因此此时local的protocol为
+         * protocol，因此，它会找到InjvmProtocol协议来导出服务
+         *
+         */
         Exporter<?> exporter = protocol.export(
                 PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, local));
         exporters.add(exporter);
@@ -700,6 +779,7 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
             if (isInvalidLocalHost(hostToBind)) {
                 anyhost = true;
                 try {
+                    // 根据protocolConfig配置获取host，如果未配置，默认使用本地
                     hostToBind = InetAddress.getLocalHost().getHostAddress();
                 } catch (UnknownHostException e) {
                     logger.warn(e.getMessage(), e);
