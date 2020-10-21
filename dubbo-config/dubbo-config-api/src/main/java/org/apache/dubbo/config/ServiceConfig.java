@@ -732,7 +732,6 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
          * 具体的protocol。这个具体的逻辑就要根据protocol的自适应扩展类来实现了，目前
          * 来说：它内部的的实现是根据url的protocol来决定的，因此此时local的protocol为
          * protocol，因此，它会找到InjvmProtocol协议来导出服务
-         *
          */
         Exporter<?> exporter = protocol.export(
                 PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, local));
