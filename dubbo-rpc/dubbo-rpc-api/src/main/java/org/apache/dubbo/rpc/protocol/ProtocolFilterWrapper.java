@@ -36,9 +36,16 @@ import static org.apache.dubbo.rpc.Constants.SERVICE_FILTER_KEY;
 
 /**
  * ListenerProtocol
+ * Protocol的包装类，它包装了ProtocolListenerWrapper类
+ *
+ *
  */
 public class ProtocolFilterWrapper implements Protocol {
 
+    /**
+     * 在构造是，此属性的值为：
+     * ProtocolListenerWrapper
+     */
     private final Protocol protocol;
 
     public ProtocolFilterWrapper(Protocol protocol) {
@@ -49,9 +56,20 @@ public class ProtocolFilterWrapper implements Protocol {
     }
 
 
-
+    /**
+     * 为invoke对象构建dubbo的过滤器
+     * @param invoker
+     * @param key
+     * @param group
+     * @param <T>
+     * @return
+     */
     private static <T> Invoker<T> buildInvokerChain(final Invoker<T> invoker, String key, String group) {
         Invoker<T> last = invoker;
+
+        /**
+         * 获取filter的自适应扩展类
+         */
         List<Filter> filters = ExtensionLoader.getExtensionLoader(Filter.class).getActivateExtension(invoker.getUrl(), key, group);
 
         if (!filters.isEmpty()) {

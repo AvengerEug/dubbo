@@ -16,6 +16,8 @@
  */
 package org.apache.dubbo.demo.provider;
 
+import org.apache.dubbo.common.extension.ExtensionLoader;
+import org.apache.dubbo.rpc.Protocol;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 public class Application {
@@ -31,6 +33,10 @@ public class Application {
          */
         ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext("spring/dubbo-provider.xml");
         context.start();
+
+        ExtensionLoader<Protocol> extensionLoader = ExtensionLoader.getExtensionLoader(Protocol.class);
+        Protocol injvm = extensionLoader.getExtension("injvm");
+
         System.in.read();
     }
 }

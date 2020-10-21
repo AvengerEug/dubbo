@@ -731,7 +731,21 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
          * 根据传入的url参数(如果不是url参数，那么它内部肯定有一个url属性)的参数来获取
          * 具体的protocol。这个具体的逻辑就要根据protocol的自适应扩展类来实现了，目前
          * 来说：它内部的的实现是根据url的protocol来决定的，因此此时local的protocol为
-         * protocol，因此，它会找到InjvmProtocol协议来导出服务
+         * protocol，因此，它会找到InjvmProtocol协议来导出服务。
+         *
+         * 但是，因为存在Wrapper机制，查看org.apache.dubbo.rpc.Protocol文件可知，
+         * 它有三个实现类：
+         * filter=org.apache.dubbo.rpc.protocol.ProtocolFilterWrapper
+         * listener=org.apache.dubbo.rpc.protocol.ProtocolListenerWrapper
+         * mock=org.apache.dubbo.rpc.support.MockProtocol
+         * 其中只有name为filter和listener的实现类为Wrapper类，
+         * name为mock的实现类中，内部并没有维护一个叫Protocol的属性，且没有对应的构造方法，所以它不是Wrapper类
+         *
+         * 因此当protocol这个自适应扩展类去根据url来获取Protocol的实现类时，此时它获取到的类为ProtocolFilterWrapper。
+         * 注意：这里并不是和我们当时总结的aop一样，当时在总结aop时，总结的是下面的类包装下面的类，但实际不是这样的。
+         * 因为在依赖注入时，是遍历一个hashset来挨个注入的，而hashset底层使用的是hashmap，因此它是无序的。
+         * 所以这个wrapper类的包装顺序完全取决于key的hash值
+         *
          */
         Exporter<?> exporter = protocol.export(
                 PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, local));
