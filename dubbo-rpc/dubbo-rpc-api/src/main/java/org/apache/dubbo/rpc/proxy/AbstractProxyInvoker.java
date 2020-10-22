@@ -34,6 +34,10 @@ import java.util.concurrent.CompletionException;
 
 /**
  * InvokerWrapper
+ *
+ * 是一个代理对象，每个暴露服务的代理类
+ * 目的就是为了调用服务方法前执行一些自定义的逻辑，比如一些过滤器等等
+ *
  */
 public abstract class AbstractProxyInvoker<T> implements Invoker<T> {
     Logger logger = LoggerFactory.getLogger(AbstractProxyInvoker.class);

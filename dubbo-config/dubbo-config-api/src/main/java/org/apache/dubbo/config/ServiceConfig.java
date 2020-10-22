@@ -166,6 +166,7 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
 
     /**
      * The exported services
+     * 所有导出的服务都存在此list中
      */
     private final List<Exporter<?>> exporters = new ArrayList<Exporter<?>>();
 
@@ -602,7 +603,11 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                 map.put(REVISION_KEY, revision);
             }
 
-            // 为接口生成包裹类 Wrapper，Wrapper 中包含了接口的详细信息，比如接口方法名数组，字段信息等
+            /*
+              为接口生成包裹类 Wrapper，Wrapper 中包含了接口的详细信息，比如接口方法名数组，字段信息等。
+              动态生成的类会继承Wrapper。同时会实现接口中的方法
+              TODO 不知道为什么要这个Wrapper类
+             */
             String[] methods = Wrapper.getWrapper(interfaceClass).getMethodNames();
             if (methods.length == 0) {
                 logger.warn("No method found in service interface " + interfaceClass.getName());
@@ -710,6 +715,16 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
     @SuppressWarnings({"unchecked", "rawtypes"})
     /**
      * always export injvm
+     *
+     * 所有的服务导出都会导出的jvm中。只有在同一个jvm中才能看到导出的服务，是jvm级别。
+     *
+     * 此服务导出比较简单，我们可以这么理解：
+     * 如果我们自己来基于jvm来做一个服务导出，会怎么做？
+     * 很简单，把服务的签名，权限符、返回值、方法名、参数个数、参数类型、返回值都记录起来，
+     * 并使用java反射进行调用。是不是很简单？
+     *
+     * 在Dubbo中，导出服务到本地也很简单，就是把方法签名存在一个List中。
+     *
      */
     private void exportLocal(URL url) {
         URL local = URLBuilder.from(url)

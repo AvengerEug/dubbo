@@ -672,7 +672,7 @@ public class ExtensionLoader<T> {
             }
             injectExtension(instance);
             Set<Class<?>> wrapperClasses = cachedWrapperClasses;
-            // 获取所有的wrapper类，并挨个调用他们的构造方法，并挨个进行依赖注入
+            // 获取所有的wrapper类，并挨个调用他们的构造方法实例化wrapper类对象，并挨个进行依赖注入
             if (CollectionUtils.isNotEmpty(wrapperClasses)) {
                 for (Class<?> wrapperClass : wrapperClasses) {
                     instance = injectExtension((T) wrapperClass.getConstructor(type).newInstance(instance));
@@ -719,7 +719,8 @@ public class ExtensionLoader<T> {
                             /**
                              * 注入进去的对象主要由如下代码决定，其中objectFactory的属性为adaptiveExtensionFactory
                              * 其中内部维护了两个ExtensionFactory，分别为：
-                             * @see SpiExtensionFactory  -> 普通情况下，使用的是此ExtensionFactory，且调用getExtesion方法时，返回的是一个adaptiveExtension，此种情况下，属性名没什么作用
+                             * @see SpiExtensionFactory  -> 普通情况下，使用的是此ExtensionFactory，
+                             *      且调用getExtesion方法时，返回的被注入属性类型的adaptiveExtension(即自适应扩展类)，此种情况下，属性名没什么作用
                              * @see org.apache.dubbo.config.spring.extension.SpringExtensionFactory  -> 用于从 Spring 的 IOC 容器中获取所需的拓展
                              */
                             Object object = objectFactory.getExtension(pt, property);

@@ -59,8 +59,8 @@ public class DubboComponentScanRegistrar implements ImportBeanDefinitionRegistra
         registerServiceAnnotationBeanPostProcessor(packagesToScan, registry);
 
         registerReferenceAnnotationBeanPostProcessor(registry);
-
     }
+
 
     /**
      * Registers {@link ServiceAnnotationBeanPostProcessor}
