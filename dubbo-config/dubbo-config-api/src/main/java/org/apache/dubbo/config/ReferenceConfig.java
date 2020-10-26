@@ -269,6 +269,23 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
         ref = null;
     }
 
+    /**
+     * 初始化服务引入的服务。导致的思路为：
+     * 假设我们要引入类型为org.apache.dubbo.demo.DemoService
+     * 1、我们要引入的类型必须是一个能发起远程调用的对象，因此引入的对象必须具备远程调用的功能(eg：发送http请求)
+     *    在dubbo中，已经确定了引入的对象肯定是一个invoke对象
+     * 2、但是invoke对象的类型不是org.apache.dubbo.demo.DemoService，所以dubbo肯定要为invoke创建代理对象，并且
+     *    代理对象的类型为org.apache.dubbo.demo.DemoService
+     * 3、在dubbo中，每个导出的服务对应一个invoke，因此可能会出现类型为org.apache.dubbo.demo.DemoService的服务有
+     *    多个实现类，所以这个服务的代理对象一定还要具备负载均衡、容错的功能，所以它内部肯定维护了一些类型为
+     *    org.apache.dubbo.demo.DemoService的服务，即内部肯定要维护很多invokers。
+     * 4、而在dubbo中，存在一个叫服务目录的概念，它存在于每个dubbo的消费端。它的作用和注册中心类似，都是存储当前服务的
+     *    所有实现，但不同的是，服务目录只存在当前消费者能消费到的服务，而注册中心存储的是所有的服务。因此在构建服务目录
+     *    的过程中，有一个过滤的功能，即只选出当前消费者能够消费的服务(有可能在服务暴露时，我只指定了某一个消费者能消费
+     *    当前服务。)，然后再使用cluster.join的api来构建上述包括所有服务的invoke对象。同时因为服务目录是从注册中心获取信息的，
+     *    为了保证注册中心服务的动态变化，所以服务目录需要监听zookeeper的节点变化(采用zookeeper的watch机制)
+     *
+     */
     private void init() {
         if (initialized) {
             return;
@@ -326,6 +343,7 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
         }
         map.put(REGISTER_IP_KEY, hostToRegistry);
 
+        // map为当前引入服务的一些配置信息，并根据这些信息来创建代理对象
         ref = createProxy(map);
 
         String serviceKey = URL.buildKey(interfaceName, group, version);

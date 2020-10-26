@@ -1,10 +1,14 @@
 package com.eugene.sumarry.aop;
 
+import org.apache.dubbo.common.extension.ExtensionFactory;
 import org.apache.dubbo.common.extension.ExtensionLoader;
+import org.apache.dubbo.rpc.Protocol;
+
+import java.io.IOException;
 
 public class Entry {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
         // 使用指定的日志文件，同时要添加log4j2.xml配置文件
         System.setProperty("dubbo.application.logger", "log4j2");
         /*
@@ -31,5 +35,9 @@ public class Entry {
         UserService userService = userServiceExtensionLoader.getExtension("userService");
         userService.findUsers();
 
+
+        ExtensionLoader<Protocol> extensionLoader = ExtensionLoader.getExtensionLoader(Protocol.class);
+        Protocol adaptiveProtocol = extensionLoader.getAdaptiveExtension();
+        System.in.read();
     }
 }

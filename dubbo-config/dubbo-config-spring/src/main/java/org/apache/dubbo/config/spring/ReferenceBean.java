@@ -68,6 +68,11 @@ public class ReferenceBean<T> extends ReferenceConfig<T> implements FactoryBean,
         SpringExtensionFactory.addApplicationContext(applicationContext);
     }
 
+    /**
+     * 从spring容器获取泛型类型的bean时，会调用此方法。
+     * 即，服务引入的逻辑
+     * @return
+     */
     @Override
     public Object getObject() {
         return get();
@@ -84,6 +89,11 @@ public class ReferenceBean<T> extends ReferenceConfig<T> implements FactoryBean,
         return true;
     }
 
+    /**
+     * bean被创建后调用，
+     * 此方法的调用主要是填充当前引用服务的一些配置，以及设置一些默认配置
+     * @throws Exception
+     */
     @Override
     @SuppressWarnings({"unchecked"})
     public void afterPropertiesSet() throws Exception {
