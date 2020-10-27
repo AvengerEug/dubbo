@@ -47,6 +47,15 @@ import static org.apache.dubbo.common.constants.CommonConstants.COMMA_SPLIT_PATT
 
 /**
  * ReferenceFactoryBean
+ *
+ * 这个类是一个FactoryBean，内部维护的bean为父类ReferenceConfig中的泛型ref属性。
+ * 因此，可以确定，我们从spring容器中获取Dubbo服务的bean对象，是从这个FactoryBean中
+ * 创建的。
+ *
+ * 同时它不仅仅是一个FactoryBean，同时它还实现了InitializingBean接口，
+ * 因此它肯定实现了afterPropertiesSet方法。和Dubbo的其他配置bean类似，
+ * 它也是在afterPropertiesSet方法中对各种配置(eg: dubbo的@Service注解或者xml中的<dubbo:reference></dubbo:reference>配置)进行加载
+ *
  */
 public class ReferenceBean<T> extends ReferenceConfig<T> implements FactoryBean, ApplicationContextAware, InitializingBean, DisposableBean {
 

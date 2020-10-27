@@ -47,13 +47,26 @@ public class RouterChain<T> {
     }
 
     private RouterChain(URL url) {
+        /**
+         * getActivateExtension方法，可以获取到扩展中被@Activate注解标识的所有扩展，返回的是一个集合。
+         * 此处获取的扩展有(下列扩展都加了@Activate注解)：
+         * 1、MockRouterFactory
+         * 2、TagRouterFactory
+         * 3、AppRouterFactory  监听的是app级别的配置，比如 demo-provider/condition-router
+         * 4、ServiceRouterFactory  监听的是服务级别的配置，比如：org.apache.dubbo.demo.DemoService/condition-router
+         */
         List<RouterFactory> extensionFactories = ExtensionLoader.getExtensionLoader(RouterFactory.class)
                 .getActivateExtension(url, (String[]) null);
 
+        // 遍历list，并调用每个RouterFactory的getRouter方法来构建router
         List<Router> routers = extensionFactories.stream()
                 .map(factory -> factory.getRouter(url))
                 .collect(Collectors.toList());
 
+        /**
+         * 将构建出来的所有router，保存到对应的属性中，同时对存放Router的list进行排序，排序依据为优先级。
+         * @see Router#compareTo(org.apache.dubbo.rpc.cluster.Router)
+         */
         initWithRouters(routers);
     }
 

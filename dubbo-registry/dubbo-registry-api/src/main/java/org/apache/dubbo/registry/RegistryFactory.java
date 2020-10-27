@@ -28,6 +28,7 @@ import org.apache.dubbo.common.extension.SPI;
 @SPI("dubbo")
 public interface RegistryFactory {
 
+
     /**
      * Connect to the registry
      * <p>
@@ -44,5 +45,4 @@ public interface RegistryFactory {
      */
     @Adaptive({"protocol"})
     Registry getRegistry(URL url);
-
 }

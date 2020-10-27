@@ -129,6 +129,10 @@ public class RegistryProtocol implements Protocol {
     private final ConcurrentMap<String, ExporterChangeableWrapper<?>> bounds = new ConcurrentHashMap<>();
     private Cluster cluster;
     private Protocol protocol;
+
+    /**
+     * @see RegistryProtocol#setRegistryFactory(org.apache.dubbo.registry.RegistryFactory)
+     */
     private RegistryFactory registryFactory;
     private ProxyFactory proxyFactory;
 
@@ -163,6 +167,33 @@ public class RegistryProtocol implements Protocol {
         this.protocol = protocol;
     }
 
+    /**
+     * 由Dubbo框架依赖注入时调用，
+     * 依赖注入时会使用类型为ExtensionFactory的扩展类(其实就是AdaptiveExtensionFactory)
+     * 而它内部存储了SpiExtensionFactory和SpringExtensionFactory.
+     * 一般情况下，从SpiExtensionFactory获取的扩展，都是自适应扩展，所以在依赖注入时，
+     * 如果SpiExtensionFactory能获取到扩展，注入的则是自适应扩展类，
+     * 而RegistryFactory类型的自适应扩展类为Dubbo自动生成的。
+     * 此时它的内容为
+     * public class RegistryFactory$Adaptive implements RegistryFactory {
+     *     public Registry getRegistry(URL uRL) {
+     *         String string;
+     *         if (uRL == null) {
+     *             throw new IllegalArgumentException("url == null");
+     *         }
+     *         URL uRL2 = uRL;
+     *         String string2 = string = uRL2.getProtocol() == null ? "dubbo" : uRL2.getProtocol();
+     *         if (string == null) {
+     *             throw new IllegalStateException(new StringBuffer().append("Failed to get extension (org.apache.dubbo.registry.RegistryFactory) name from url (").append(uRL2.toString()).append(") use keys([protocol])").toString());
+     *         }
+     *         RegistryFactory registryFactory = (RegistryFactory)ExtensionLoader.getExtensionLoader(RegistryFactory.class).getExtension(string);
+     *         return registryFactory.getRegistry(uRL);
+     *     }
+     * }
+     * 因此，它是根据url中的protocol来确定使用哪个RegistryFactory来处理
+     *
+     * @param registryFactory
+     */
     public void setRegistryFactory(RegistryFactory registryFactory) {
         this.registryFactory = registryFactory;
     }
@@ -214,7 +245,13 @@ public class RegistryProtocol implements Protocol {
         overrideListeners.put(overrideSubscribeUrl, overrideSubscribeListener);
 
         providerUrl = overrideUrlWithConfig(providerUrl, overrideSubscribeListener);
-        //export invoker
+
+        /**
+         * 导出服务，这里调用方法的名字叫exportLocalExport，
+         * 但它内部做的事情和导出到JVM差不多，但是它并不是采用Injvm协议而是使用Dubbo协议
+         * 其大致逻辑为：
+         * 将服务保存到jvm中，并开启服务器以便接收RPC请求
+         */
         final ExporterChangeableWrapper<T> exporter = doLocalExport(originInvoker, providerUrl);
 
         // url to registry
@@ -249,6 +286,17 @@ public class RegistryProtocol implements Protocol {
     private <T> ExporterChangeableWrapper<T> doLocalExport(final Invoker<T> originInvoker, URL providerUrl) {
         String key = getCacheKey(originInvoker);
 
+        /**
+         * 此段代码利用jdk1.8的特性，首先key对应的value是一个Functional.
+         *
+         * 阅读
+         * @see ConcurrentMap#computeIfAbsent(java.lang.Object, java.util.function.Function)
+         * 源码后可以发现，如果key对应的value没有值，则会执行后面的Functional，并且将key作为参数
+         * 传入到Functional中。
+         * 因此。整段代码的含义为：
+         * 如果key不存在，则将key作为参数调用后面的方法，并将后面方法返回出来的对象放入ConcurrentHashMap中,
+         * 以及return出来
+         */
         return (ExporterChangeableWrapper<T>) bounds.computeIfAbsent(key, s -> {
             Invoker<?> invokerDelegate = new InvokerDelegate<>(originInvoker, providerUrl);
             return new ExporterChangeableWrapper<>((Exporter<T>) protocol.export(invokerDelegate), originInvoker);
@@ -378,6 +426,14 @@ public class RegistryProtocol implements Protocol {
         return key;
     }
 
+    /**
+     * 服务引入的逻辑
+     * @param type Service class
+     * @param url  URL address for the remote service
+     * @param <T>
+     * @return
+     * @throws RpcException
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
@@ -385,6 +441,7 @@ public class RegistryProtocol implements Protocol {
                 .setProtocol(url.getParameter(REGISTRY_KEY, DEFAULT_REGISTRY))
                 .removeParameter(REGISTRY_KEY)
                 .build();
+        // 会根据url中的protocol属性来决定使用初始化哪个注册中心
         Registry registry = registryFactory.getRegistry(url);
         if (RegistryService.class.equals(type)) {
             return proxyFactory.getInvoker((T) registry, type, url);
@@ -406,6 +463,7 @@ public class RegistryProtocol implements Protocol {
     }
 
     private <T> Invoker<T> doRefer(Cluster cluster, Registry registry, Class<T> type, URL url) {
+        // 创建服务目录
         RegistryDirectory<T> directory = new RegistryDirectory<T>(type, url);
         directory.setRegistry(registry);
         directory.setProtocol(protocol);
@@ -416,6 +474,17 @@ public class RegistryProtocol implements Protocol {
             directory.setRegisteredConsumerUrl(getRegisteredConsumerUrl(subscribeUrl, url));
             registry.register(directory.getRegisteredConsumerUrl());
         }
+        /**
+         * 此处主要是构建路由链路。构建路由链路的目的就是为了过滤。
+         * 因为上面创建的服务目录需要将注册中心的信息存储起来，但是作为消费者而言，
+         * 它只对能访问的服务感兴趣，因此在同步服务到本地时，需要筛选去自己能够调用的。
+         *
+         * 同时，因为服务信息有可能会变，因此它需要对注册中心对应的路由链路进行监听。
+         * 在此处只监听到了：
+         * 1、标签路由
+         * 2、应用路由
+         * 3、服务路由
+         */
         directory.buildRouterChain(subscribeUrl);
         directory.subscribe(subscribeUrl.addParameter(CATEGORY_KEY,
                 PROVIDERS_CATEGORY + "," + CONFIGURATORS_CATEGORY + "," + ROUTERS_CATEGORY));

@@ -34,6 +34,92 @@ import java.util.regex.Matcher;
 
 /**
  * Wrapper.
+ *
+ * Wrapper类是一个抽象类，只能通过getWrapper方法来动态的创建子类
+ *
+ * 其中动态生成的子类具备的特性为：
+ * 1、重写Wrapper的setPropertyValue和getPropertyValue方法，目的是设置或获取目标类对象
+ * 2、重写invokeMethod方法，此方法内部会对目标类的所有方法进行回调，参考invokeMethod的方法签名
+ * @see Wrapper#invokeMethod(java.lang.Object, java.lang.String, java.lang.Class[], java.lang.Object[])
+ *    会根据第二个参数(方法名)来具体的调用目标类的方法
+ * 拿DemoServiceImpl为例，为它生成的Wrapper类的源码如下：
+ * public class Wrapper1
+ * extends Wrapper
+ * implements ClassGenerator.DC {
+ *     public static String[] pns;
+ *     public static Map pts;
+ *     public static String[] mns;
+ *     public static String[] dmns;
+ *     public static Class[] mts0;
+ *     public static Class[] mts1;
+ *
+ *     @Override
+ *     public String[] getPropertyNames() {
+ *         return pns;
+ *     }
+ *
+ *     @Override
+ *     public boolean hasProperty(String string) {
+ *         return pts.containsKey(string);
+ *     }
+ *
+ *     public Class getPropertyType(String string) {
+ *         return (Class)pts.get(string);
+ *     }
+ *
+ *     @Override
+ *     public String[] getMethodNames() {
+ *         return mns;
+ *     }
+ *
+ *     @Override
+ *     public String[] getDeclaredMethodNames() {
+ *         return dmns;
+ *     }
+ *
+ *     @Override
+ *     public void setPropertyValue(Object object, String string, Object object2) {
+ *         try {
+ *             DemoServiceImpl demoServiceImpl = (DemoServiceImpl)object;
+ *         }
+ *         catch (Throwable throwable) {
+ *             throw new IllegalArgumentException(throwable);
+ *         }
+ *         throw new NoSuchPropertyException(new StringBuffer().append("Not found property \"").append(string).append("\" field or setter method in class org.apache.dubbo.demo.provider.DemoServiceImpl.").toString());
+ *     }
+ *
+ *     @Override
+ *     public Object getPropertyValue(Object object, String string) {
+ *         try {
+ *             DemoServiceImpl demoServiceImpl = (DemoServiceImpl)object;
+ *         }
+ *         catch (Throwable throwable) {
+ *             throw new IllegalArgumentException(throwable);
+ *         }
+ *         throw new NoSuchPropertyException(new StringBuffer().append("Not found property \"").append(string).append("\" field or setter method in class org.apache.dubbo.demo.provider.DemoServiceImpl.").toString());
+ *     }
+ *
+ *     public Object invokeMethod(Object object, String string, Class[] arrclass, Object[] arrobject) throws InvocationTargetException {
+ *         DemoServiceImpl demoServiceImpl;
+ *         try {
+ *             demoServiceImpl = (DemoServiceImpl)object;
+ *         }
+ *         catch (Throwable throwable) {
+ *             throw new IllegalArgumentException(throwable);
+ *         }
+ *         try {
+ *             if ("sayHello".equals(string) && arrclass.length == 1) {
+ *                 return demoServiceImpl.sayHello((String)arrobject[0]);
+ *             }
+ *         }
+ *         catch (Throwable throwable) {
+ *             throw new InvocationTargetException(throwable);
+ *         }
+ *         throw new NoSuchMethodException(new StringBuffer().append("Not found method \"").append(string).append("\" in class org.apache.dubbo.demo.provider.DemoServiceImpl.").toString());
+ *     }
+ * }
+ *
+ *
  */
 public abstract class Wrapper {
     private static final Map<Class<?>, Wrapper> WRAPPER_MAP = new ConcurrentHashMap<Class<?>, Wrapper>(); //class wrapper map

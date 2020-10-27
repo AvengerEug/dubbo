@@ -35,6 +35,16 @@ public class JavassistProxyFactory extends AbstractProxyFactory {
         return (T) Proxy.getProxy(interfaces).newInstance(new InvokerInvocationHandler(invoker));
     }
 
+    /**
+     * 其主要作用是生成invoker对象，在生成invoker对象之前，会动态生成org.apache.dubbo.common.bytecode.Wrapper类,
+     * 而Wrapper类的主要作用是用来包裹目标类，即参数的proxy
+     *
+     * @param proxy 目标类
+     * @param type 目标类的类型
+     * @param url 目标类对应的url
+     * @param <T> 目标类的类型
+     * @return 返回一个invoke对象，其中内部包含一个Wrapper类，而Wrapper类内部包裹了目标类proxy
+     */
     @Override
     public <T> Invoker<T> getInvoker(T proxy, Class<T> type, URL url) {
         // TODO Wrapper cannot handle this scenario correctly: the classname contains '$'
@@ -46,7 +56,6 @@ public class JavassistProxyFactory extends AbstractProxyFactory {
          * 第二个为：org.apache.dubbo.common.bytecode.Wrapper的内部属性OBJECT_WRAPPER
          * @see Wrapper#OBJECT_WRAPPER
          * 除此之外：会为每一个服务中指定的类型生成一个invoke(包括他们的实现类和接口类)
-         *
          */
         final Wrapper wrapper = Wrapper.getWrapper(proxy.getClass().getName().indexOf('$') < 0 ? proxy.getClass() : type);
         // 创建匿名 Invoker 类对象，并实现 doInvoke 方法。

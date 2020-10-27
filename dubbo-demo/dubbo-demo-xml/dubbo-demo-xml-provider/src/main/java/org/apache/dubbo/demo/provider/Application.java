@@ -35,6 +35,8 @@ public class Application {
         context.start();
 
         ExtensionLoader<Protocol> extensionLoader = ExtensionLoader.getExtensionLoader(Protocol.class);
+
+        // 获取到的是Wrapper类
         Protocol injvm = extensionLoader.getExtension("injvm");
 
         System.in.read();

@@ -145,6 +145,14 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
      * A {@link ProxyFactory} implementation that will generate a exported service proxy,the JavassistProxyFactory is its
      * default implementation
      *
+     * 虽然ProxyFactory的自适应扩展类是Dubbo自己生成的，但是它内部的从url获取参数的逻辑为(使用arthas反编译org.apache.dubbo.rpc.ProxyFactory$Adaptive类得知)：
+     * String string = uRL.getParameter("proxy", "javassist");
+     *
+     * 若url中无proxy参数，则key为proxy的值无value时，则使用javassist作为默认值，即最终获取到的是JavassistProxyFactory对象
+     *
+     *
+     *
+     *
      * @see JavassistProxyFactory
      */
     private static final ProxyFactory PROXY_FACTORY = ExtensionLoader.getExtensionLoader(ProxyFactory.class).getAdaptiveExtension();
@@ -685,7 +693,11 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                         if (StringUtils.isNotEmpty(proxy)) {
                             registryURL = registryURL.addParameter(PROXY_KEY, proxy);
                         }
-
+                        /**
+                         * 此行代码执行结束后，会获取ref对象的invoker对象，
+                         * 其中内部会动态生成Wrapper包装类，Wrapper会对ref对象进行解析。
+                         * 然后利用模板方法设计模式，将invoke中doInvoke的逻辑委托给Wrapper类去执行
+                         */
                         Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString()));
                         DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
 
