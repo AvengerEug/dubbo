@@ -481,11 +481,13 @@ public class RegistryProtocol implements Protocol {
          *
          * 同时，因为服务信息有可能会变，因此它需要对注册中心对应的路由链路进行监听。
          * 在此处只监听到了：
-         * 1、标签路由
-         * 2、应用路由
-         * 3、服务路由
+         * 1、标签路由   只是创建了router，但并未对相应的节点进行监听
+         * 2、应用路由   监听了应用级别的配置 eg: demo-provider/condition-router
+         * 3、服务路由   监听了服务级别的配置 eg: /org.apache.dubbo.demo.DemoService/condition-router
          */
         directory.buildRouterChain(subscribeUrl);
+
+        //
         directory.subscribe(subscribeUrl.addParameter(CATEGORY_KEY,
                 PROVIDERS_CATEGORY + "," + CONFIGURATORS_CATEGORY + "," + ROUTERS_CATEGORY));
 

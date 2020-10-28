@@ -123,6 +123,11 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
     // Set<invokerUrls> cache invokeUrls to invokers mapping.
     private volatile Set<URL> cachedInvokerUrls; // The initial value is null and the midway may be assigned to null, please use the local variable reference
 
+    /**
+     * 监听消费者相关的配置，RegistryDirectory初始化时就监听了 /demo-consumer/configurators 节点
+     * 作为消费者，其实它只需要监听注册中心中自己服务的一些变化即可
+     *
+     */
     private static final ConsumerConfigurationListener CONSUMER_CONFIGURATION_LISTENER = new ConsumerConfigurationListener();
     private ReferenceConfigurationListener serviceConfigurationListener;
 
@@ -168,6 +173,7 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
     public void subscribe(URL url) {
         setConsumerUrl(url);
         CONSUMER_CONFIGURATION_LISTENER.addNotifyListener(this);
+        // 监听服务级别的配置
         serviceConfigurationListener = new ReferenceConfigurationListener(this, url);
         registry.subscribe(url, this);
     }
@@ -704,6 +710,10 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
         }
     }
 
+    /**
+     * 监听服务级别的配置
+     * eg: /org.apache.dubbo.demo.DemoService/configurators
+     */
     private static class ReferenceConfigurationListener extends AbstractConfiguratorListener {
         private RegistryDirectory directory;
         private URL url;
