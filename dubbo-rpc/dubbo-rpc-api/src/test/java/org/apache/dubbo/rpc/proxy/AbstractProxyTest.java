@@ -61,13 +61,23 @@ public abstract class AbstractProxyTest {
 
         DemoService origin = new org.apache.dubbo.rpc.support.DemoServiceImpl();
 
+        // 1、new DemoServiceImpl()对象生成Wrapper类，
+        // 2、内部再为Wrapper类生成Invoker类，当调用invoker类的invoke方法时，内部的doInvoker方法将委托给Wrapper类处理
         Invoker<DemoService> invoker = factory.getInvoker(new DemoServiceImpl(), DemoService.class, url);
 
+        // 断言：判断invoker内部维护的对象(其实就是上行代码中getInvoker方法的第二个参数)是否是DemoService
+        // PS：这里不要被getInterface()这个方法签名给糊弄到了，不是获取它的接口哦！
         Assertions.assertEquals(invoker.getInterface(), DemoService.class);
 
+        // 断言：判断invoker.invoke(new RpcInvocation("echo", new Class[]{String.class}, new Object[]{"aa"})).getValue()的执行结果是否和origin.echo("aa")相等
+        // 其中，左侧是调用了invoker的invoke方法，其中参数为自己new出来的RpcInvocation。new出来的RpcInvocation含义为：调用invoker的echo方法，
+        //      第一个参数的类型为String，值为aa
+        // 右侧则是直接调用DemoServiceImpl的echo方法。
+        // 其实最终，左右两侧都是调用了同一个方法，只不过一个是通过invoker来调用的，另外一个是直接调用的
         Assertions.assertEquals(invoker.invoke(new RpcInvocation("echo", new Class[]{String.class}, new Object[]{"aa"})).getValue(),
                 origin.echo("aa"));
 
+        System.in.read();
     }
 
 }

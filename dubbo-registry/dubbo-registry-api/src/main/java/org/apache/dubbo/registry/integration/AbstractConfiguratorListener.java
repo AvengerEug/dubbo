@@ -37,12 +37,26 @@ public abstract class AbstractConfiguratorListener implements ConfigurationListe
 
     protected List<Configurator> configurators = Collections.emptyList();
 
-
+    /**
+     * 此方法最主要的作用就是：
+     * 根据传入进来的key，组装存储在zookeeper的节点，
+     * 并对节点进行监听和读取信息，进而转化成Configurators
+     * @param key
+     */
     protected final void initWith(String key) {
+        /**
+         * 动态获取配置中心。假设此时获取到的配置中心为zookeeper
+         * @see org.apache.dubbo.configcenter.support.zookeeper.ZookeeperDynamicConfiguration
+         */
         DynamicConfiguration dynamicConfiguration = DynamicConfiguration.getDynamicConfiguration();
+        /**
+         * 为配置中心添加监听器，最终会添加到zookeeper的配置中心中
+         * @see org.apache.dubbo.configcenter.support.zookeeper.ZookeeperDynamicConfiguration#cacheListener
+         */
         dynamicConfiguration.addListener(key, this);
         String rawConfig = dynamicConfiguration.getRule(key, DynamicConfiguration.DEFAULT_GROUP);
         if (!StringUtils.isEmpty(rawConfig)) {
+            // 根据指定节点对应zookeeper的节点内容来生成对应的Configurators配置
             genConfiguratorsFromRawRule(rawConfig);
         }
     }

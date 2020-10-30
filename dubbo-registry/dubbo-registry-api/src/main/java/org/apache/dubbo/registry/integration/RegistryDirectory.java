@@ -30,6 +30,7 @@ import org.apache.dubbo.common.utils.UrlUtils;
 import org.apache.dubbo.configcenter.DynamicConfiguration;
 import org.apache.dubbo.registry.NotifyListener;
 import org.apache.dubbo.registry.Registry;
+import org.apache.dubbo.registry.support.AbstractRegistry;
 import org.apache.dubbo.remoting.Constants;
 import org.apache.dubbo.rpc.Invocation;
 import org.apache.dubbo.rpc.Invoker;
@@ -100,6 +101,7 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
     private final Map<String, String> queryMap; // Initialization at construction time, assertion not null
     private final URL directoryUrl; // Initialization at construction time, assertion not null, and always assign non null value
     private final boolean multiGroup;
+    // 此扩展是Dubbo框架启动时自动注入的，默认情况下，注入的是Protocol的自适应扩展类
     private Protocol protocol; // Initialization at the time of injection, the assertion is not null
     private Registry registry; // Initialization at the time of injection, the assertion is not null
     private volatile boolean forbidden = false;
@@ -125,10 +127,14 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
 
     /**
      * 监听消费者相关的配置，RegistryDirectory初始化时就监听了 /demo-consumer/configurators 节点
-     * 作为消费者，其实它只需要监听注册中心中自己服务的一些变化即可
-     *
+     * 作为消费者，其实它只需要监听注册中心中自己服务的一些变化即可.
+     * 存放所有消费者的配置监听器
      */
     private static final ConsumerConfigurationListener CONSUMER_CONFIGURATION_LISTENER = new ConsumerConfigurationListener();
+
+    /**
+     *
+     */
     private ReferenceConfigurationListener serviceConfigurationListener;
 
 
@@ -175,6 +181,11 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
         CONSUMER_CONFIGURATION_LISTENER.addNotifyListener(this);
         // 监听服务级别的配置
         serviceConfigurationListener = new ReferenceConfigurationListener(this, url);
+        /**
+         * RegistryDirectory中的registry由构建RegistryDirectory指定的。
+         * 假设此时的注册中心为zookeeper，因此会进入zookeeper的subscribe方法。
+         * 但是，zookeeper中并没有subscribe方法，因此会进入父类(FailbackRegistry)的subscribe方法
+         */
         registry.subscribe(url, this);
     }
 
@@ -211,6 +222,10 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
         }
     }
 
+    /**
+     * 由此处调用：
+     * @see AbstractRegistry#notify(org.apache.dubbo.common.URL, org.apache.dubbo.registry.NotifyListener, java.util.List)
+     */
     @Override
     public synchronized void notify(List<URL> urls) {
         Map<String, List<URL>> categoryUrls = urls.stream()
@@ -721,6 +736,8 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
         ReferenceConfigurationListener(RegistryDirectory directory, URL url) {
             this.directory = directory;
             this.url = url;
+            // {当前引用服务的全限定名}::.configurators   ==>  eg: org.apache.dubbo.demo.DemoService::.configurators
+            // ==> 底层转化成：/dubbo/org.apache.dubbo.demo.DemoService/configurators
             this.initWith(DynamicConfiguration.getRuleKey(url) + CONFIGURATORS_SUFFIX);
         }
 
@@ -735,6 +752,7 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
         List<RegistryDirectory> listeners = new ArrayList<>();
 
         ConsumerConfigurationListener() {
+            // key = {当前服务名}.configurators  ===>  eg: demo-provider.configurators
             this.initWith(ApplicationModel.getApplication() + CONFIGURATORS_SUFFIX);
         }
 

@@ -26,19 +26,31 @@ import static org.junit.jupiter.api.Assertions.fail;
 public class WrapperTest {
     @Test
     public void testMain() throws Exception {
+        // 为I1接口生成Wrapper类
         Wrapper w = Wrapper.getWrapper(I1.class);
+        // 获取I1当前类的方法
         String[] ns = w.getDeclaredMethodNames();
+        // 断言：判断ns的长度是否等于5。不相等则抛异常
         assertEquals(ns.length, 5);
+        // 获取I1当前类及其父类的方法(省略Object的方法)  ==> I1 和 I0的所有方法，一共6个
         ns = w.getMethodNames();
+        // 断言：判断ns的长度是否为6
         assertEquals(ns.length, 6);
 
         Object obj = new Impl1();
+        // 调用wrapper类的getPropertyValue方法，目的是获取obj的name属性 进而判断值是否为"you name".
+        // 这里因为obj是Impl1类，而Impl1类的name属性叫"you name". 因此使用wrapper类获取obj的name属性成功
         assertEquals(w.getPropertyValue(obj, "name"), "you name");
 
+        // 使用wrapper类修改obj对象的name属性为changed
         w.setPropertyValue(obj, "name", "changed");
+        // 使用wrapper类获取obj的name属性，判断是否为修改后的值
         assertEquals(w.getPropertyValue(obj, "name"), "changed");
 
+        // 使用wrapper类来调用obj的hello方法，并且传递类型为String类型的参数，且对应参数的名字叫"qianlei"
         w.invokeMethod(obj, "hello", new Class<?>[]{String.class}, new Object[]{"qianlei"});
+
+        System.in.read();
     }
 
     // bug: DUBBO-132
@@ -136,6 +148,7 @@ public class WrapperTest {
     }
 
     public static interface I1 extends I0 {
+        // 认为子类存在名字叫name为属性
         void setName(String name);
 
         void hello(String name);
@@ -144,6 +157,7 @@ public class WrapperTest {
 
         float getFloat();
 
+        // 认为子类存在名字叫float为属性
         void setFloat(float f);
     }
 

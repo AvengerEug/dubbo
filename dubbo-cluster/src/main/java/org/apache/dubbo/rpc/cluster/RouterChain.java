@@ -51,8 +51,8 @@ public class RouterChain<T> {
          * getActivateExtension方法，可以获取到扩展中被@Activate注解标识的所有扩展，返回的是一个集合。
          * 此处获取的扩展有(下列扩展都加了@Activate注解)：
          * 1、MockRouterFactory
-         * 2、TagRouterFactory
-         * 3、AppRouterFactory  监听的是app级别的配置，比如 demo-provider/condition-router
+         * 2、TagRouterFactory  只是初始化了TagRouterFactory，还没有监听zookeeper的节点
+         * 3、AppRouterFactory  监听的是app级别的配置，比如 demo-provider/condition-router   (需要结合dubbo管理端添加一些路由)
          * 4、ServiceRouterFactory  监听的是服务级别的配置，比如：org.apache.dubbo.demo.DemoService/condition-router
          */
         List<RouterFactory> extensionFactories = ExtensionLoader.getExtensionLoader(RouterFactory.class)

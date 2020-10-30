@@ -613,8 +613,7 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
 
             /*
               为接口生成包裹类 Wrapper，Wrapper 中包含了接口的详细信息，比如接口方法名数组，字段信息等。
-              动态生成的类会继承Wrapper。同时会实现接口中的方法
-              TODO 不知道为什么要这个Wrapper类
+              动态生成的类会继承Wrapper。同时会实现接口中的方法. 目的是为了获取这个接口的所有方法
              */
             String[] methods = Wrapper.getWrapper(interfaceClass).getMethodNames();
             if (methods.length == 0) {

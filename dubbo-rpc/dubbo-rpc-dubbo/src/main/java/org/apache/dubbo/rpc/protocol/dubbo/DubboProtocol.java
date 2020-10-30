@@ -408,6 +408,11 @@ public class DubboProtocol extends AbstractProtocol {
 
     @Override
     public <T> Invoker<T> protocolBindingRefer(Class<T> serviceType, URL url) throws RpcException {
+        /**
+         * 此处可以优化序列化
+         * 主要是根据URL中是否有key为optimizer的参数来决定是否序列化
+         * TODO 待校验公司的序列化优化是不是这里做的
+         */
         optimizeSerialization(url);
 
         // create rpc invoker.

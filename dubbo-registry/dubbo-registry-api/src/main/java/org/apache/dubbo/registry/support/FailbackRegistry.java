@@ -288,7 +288,7 @@ public abstract class FailbackRegistry extends AbstractRegistry {
 
     @Override
     public void subscribe(URL url, NotifyListener listener) {
-        super.subscribe(url, listener);
+        super.subscribe(url, listener); // 此处使用了责任链的设计模式，对应的逻辑由对应的子类或者父类实现
         removeFailedSubscribed(url, listener);
         try {
             // Sending a subscription request to the server side

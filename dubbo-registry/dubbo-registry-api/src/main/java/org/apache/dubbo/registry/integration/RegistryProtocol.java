@@ -441,7 +441,7 @@ public class RegistryProtocol implements Protocol {
                 .setProtocol(url.getParameter(REGISTRY_KEY, DEFAULT_REGISTRY))
                 .removeParameter(REGISTRY_KEY)
                 .build();
-        // 会根据url中的protocol属性来决定使用初始化哪个注册中心
+        // 会根据url中的protocol属性来决定初始化哪个注册中心
         Registry registry = registryFactory.getRegistry(url);
         if (RegistryService.class.equals(type)) {
             return proxyFactory.getInvoker((T) registry, type, url);
@@ -463,7 +463,7 @@ public class RegistryProtocol implements Protocol {
     }
 
     private <T> Invoker<T> doRefer(Cluster cluster, Registry registry, Class<T> type, URL url) {
-        // 创建服务目录
+        // 创建服务目录, 指定当前服务目录的类型、url、注册中心、协议 ==> 最终每一个服务会对应一个服务目录
         RegistryDirectory<T> directory = new RegistryDirectory<T>(type, url);
         directory.setRegistry(registry);
         directory.setProtocol(protocol);
@@ -472,6 +472,7 @@ public class RegistryProtocol implements Protocol {
         URL subscribeUrl = new URL(CONSUMER_PROTOCOL, parameters.remove(REGISTER_IP_KEY), 0, type.getName(), parameters);
         if (!ANY_VALUE.equals(url.getServiceInterface()) && url.getParameter(REGISTER_KEY, true)) {
             directory.setRegisteredConsumerUrl(getRegisteredConsumerUrl(subscribeUrl, url));
+            // 将当前服务注册到注册中心 --> /dubbo/org.apache.dubbo.demo.DemoService/consumers/consumer%3A%2F%2F197.168.25.149%2Forg.apache.dubbo.demo.DemoService%3Fapplication%3Ddemo-consumer%26category%3Dconsumers%26check%3Dfalse%26dubbo%3D2.0.2%26interface%3Dorg.apache.dubbo.demo.DemoService%26lazy%3Dfalse%26methods%3DsayHello%26pid%3D11116%26qos.port%3D33333%26side%3Dconsumer%26sticky%3Dfalse%26timestamp%3D1603954142875
             registry.register(directory.getRegisteredConsumerUrl());
         }
         /**
@@ -481,16 +482,31 @@ public class RegistryProtocol implements Protocol {
          *
          * 同时，因为服务信息有可能会变，因此它需要对注册中心对应的路由链路进行监听。
          * 在此处只监听到了：
-         * 1、标签路由   只是创建了router，但并未对相应的节点进行监听
-         * 2、应用路由   监听了应用级别的配置 eg: demo-provider/condition-router
-         * 3、服务路由   监听了服务级别的配置 eg: /org.apache.dubbo.demo.DemoService/condition-router
+         * 1、标签路由   只是初始化了，还未监听节点
+         * 2、应用路由   初始化了，同时监听了应用级别的节点
+         * 3、服务路由   初始化了，同时监听了服务级别的节点
          */
         directory.buildRouterChain(subscribeUrl);
 
-        //
+        /**
+         * 为url中添加category的key，value为：providers、configurators、routers。
+         *
+         * 同时，获取zookeeper中的consumer节点(路径：/dubbo/org.apache.dubbo.demo.DemoService/consumers)，获取到当前服务的所有提供者，并将他们挨个
+         * 转化成invoker对象
+         *
+         */
         directory.subscribe(subscribeUrl.addParameter(CATEGORY_KEY,
                 PROVIDERS_CATEGORY + "," + CONFIGURATORS_CATEGORY + "," + ROUTERS_CATEGORY));
 
+        /**
+         * 传入的cluster是Cluster的自适应扩展类。
+         * 内部默认是根据URL的cluster参数来决定使用哪一个扩展，具体代码如下：
+         * String string = uRL.getParameter("cluster", "failover");
+         *
+         * 如果url中无key为cluster的参数，则使用failover作为默认值返回。
+         * 因此，默认情况下，使用的key为failover对应的扩展。但同时要注意，
+         * 会出现包装类的情况。
+         */
         Invoker invoker = cluster.join(directory);
         ProviderConsumerRegTable.registerConsumer(invoker, url, subscribeUrl, directory);
         return invoker;

@@ -163,6 +163,7 @@ public class ZookeeperRegistry extends FailbackRegistry {
                 }
             } else {
                 List<URL> urls = new ArrayList<>();
+                // 获取传入的category参数对应的三个指定节点：providers、configurators、routers
                 for (String path : toCategoriesPath(url)) {
                     ConcurrentMap<NotifyListener, ChildListener> listeners = zkListeners.get(url);
                     if (listeners == null) {
@@ -174,9 +175,12 @@ public class ZookeeperRegistry extends FailbackRegistry {
                         listeners.putIfAbsent(listener, (parentPath, currentChilds) -> ZookeeperRegistry.this.notify(url, listener, toUrlsWithEmpty(url, parentPath, currentChilds)));
                         zkListener = listeners.get(listener);
                     }
+                    // 创建对应的节点
                     zkClient.create(path, false);
+                    // 并对对应的节点进行监听
                     List<String> children = zkClient.addChildListener(path, zkListener);
                     if (children != null) {
+                        // TODO empty协议的作用？
                         urls.addAll(toUrlsWithEmpty(url, path, children));
                     }
                 }
