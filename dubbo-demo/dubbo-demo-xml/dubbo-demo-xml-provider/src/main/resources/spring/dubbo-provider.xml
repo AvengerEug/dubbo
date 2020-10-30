@@ -36,6 +36,6 @@
     <!-- declare the service interface to be exported
         一个dubbo:service标签 就对应一个ServiceBean对象，spring容器会去初始化它
     -->
-    <dubbo:service id="test" interface="org.apache.dubbo.demo.DemoService" ref="demoService"/>
+    <dubbo:service id="test" interface="org.apache.dubbo.demo.DemoService" ref="demoService" />
 
 </beans>

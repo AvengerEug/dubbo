@@ -488,9 +488,9 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void doExportUrls() {
-        // URL 里面的字符串类似如下结构:
-        // registry://224.5.6.7:1234/org.apache.dubbo.registry.RegistryService?application=demo-provider&dubbo=2.0.2&pid=18280&qos.port=22222&registry=multicast&timestamp=1602473602703
-        // 其中，这是注册中心的URL
+        // 从当前应用程序的配置中获取注册中心，并把他们组装成URL
+        // eg: registry://127.0.0.1:2181/org.apache.dubbo.registry.RegistryService?application=demo-provider&dubbo=2.0.2&registry=zookeeper&..省略其他参数
+        // 主要的核心部分为key为registry的参数，这个参数指定了当前暴露出去的服务支持那种注册中心
         List<URL> registryURLs = loadRegistries(true);
         for (ProtocolConfig protocolConfig : protocols) {
             String pathKey = URL.buildKey(getContextPath(protocolConfig).map(p -> p + "/" + path).orElse(path), group, version);
@@ -516,18 +516,44 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         }
 
         Map<String, String> map = new HashMap<String, String>();
-        // 添加 side、版本、时间戳以及进程号等信息到 map 中
+        // 服务暴露流程，很明显属于服务提供者，因此side对应的值为provider ==> side -> provider
         map.put(SIDE_KEY, PROVIDER_SIDE);
 
+        /**
+         * 获取程序运行时的参数：
+         * 1、Dubbo协议的版本   ===> 由Version类决定  ==> dubbo -> 2.0.2
+         * 2、Dubbo Release的版本 ==> 由Version类决定 ==> release -> ''
+         * 3、获取当前时间戳用于标识当前服务组装URL的时间  ==> timestamp -> 1604055977423
+         * 4、当前应用程序占用操作系统的进程 pid -> 34280
+         */
         appendRuntimeParameters(map);
         // 通过反射将对象的字段信息添加到 map 中
         appendParameters(map, metrics);
+        // 填充应用程序名，来标识当前暴露的服务属于哪一个应用
+        /*
+         * qos.port -> 22222
+         * application -> demo-provider
+         */
         appendParameters(map, application);
+        // 填充模块名，来标识当前暴露的服务属于哪一个模块
         appendParameters(map, module);
         // remove 'default.' prefix for configs from ProviderConfig
         // appendParameters(map, provider, Constants.DEFAULT_KEY);
+        // 将Provider相关的配置添加到URL中
+        /*
+         * register -> true
+         * dynamic -> true
+         * deprecated -> false
+         */
         appendParameters(map, provider);
+        // 将协议相关的配置添加到URL中，其中这个协议由传入的参数决定
         appendParameters(map, protocolConfig);
+        // 将当前暴露出去的服务的相关配置也添加到URL中
+        /*
+         * generic -> false
+         * bean.name -> test
+         * interface -> org.apache.dubbo.demo.DemoService
+         */
         appendParameters(map, this);
 
         // methods 为 MethodConfig 集合，MethodConfig 中存储了 <dubbo:method> 标签的配置信息
@@ -606,14 +632,22 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
             map.put(GENERIC_KEY, generic);
             map.put(METHODS_KEY, ANY_VALUE);
         } else {
+            // 获取服务的版本
             String revision = Version.getVersion(interfaceClass, version);
             if (revision != null && revision.length() > 0) {
                 map.put(REVISION_KEY, revision);
             }
 
             /*
-              为接口生成包裹类 Wrapper，Wrapper 中包含了接口的详细信息，比如接口方法名数组，字段信息等。
-              动态生成的类会继承Wrapper。同时会实现接口中的方法. 目的是为了获取这个接口的所有方法
+             * ===============================重点=========================
+             * 还记得Wrapper嘛？(上篇文章中有总结到)此处用到了Wrapper。
+             * 在此处，我们用到了interfaceClass的wrapper类，interfaceClass就是
+             * 当前暴露出去的服务类型，在此处为: org.apache.dubbo.demo.DemoService。
+             * 在上篇文章中，我们有介绍过Wrapper类
+             * getDeclaredMethodNames和getMethodNames的区别：
+             * 前者获取的是当前类的方法，而后者获取的是当前类及其父类的方法.
+             * 因此，此处我们仅仅是为了获取当前暴露出去的服务拥有哪些方法，拿到方法名而已。
+             * ===============================重点=========================
              */
             String[] methods = Wrapper.getWrapper(interfaceClass).getMethodNames();
             if (methods.length == 0) {
@@ -621,6 +655,9 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                 map.put(METHODS_KEY, ANY_VALUE);
             } else {
                 // 添加方法名到 map 中，如果包含多个方法名，则用逗号隔开，比如 method = init,destroy
+                /*
+                 * methods -> sayHello
+                 */
                 map.put(METHODS_KEY, StringUtils.join(new HashSet<String>(Arrays.asList(methods)), ","));
             }
         }
@@ -636,28 +673,24 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         }
         // export service  如果dubbo:protocol标签未配置host，则默认使用本机
         String host = this.findConfigedHosts(protocolConfig, registryURLs, map);
-        // 如果dubbo:protocol标签未配置host，则默认使用dubbo协议的20880端口
+        // 如果dubbo:protocol标签未配置port，则默认使用dubbo协议的20880端口，后续开启的服务将监听在此处获取的端口
         Integer port = this.findConfigedPorts(protocolConfig, name, map);
         URL url = new URL(name, host, port, getContextPath(protocolConfig).map(p -> p + "/" + path).orElse(path), map);
 
-        /**
-         *
-         *
-         * 可以通过在spi中配置如下类，来实现对url的更新
-         * @see AbstractConfigurator
-         *
-         * TODO 暂不知道这个是干啥用的，待总结
-         */
         if (ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
                 .hasExtension(url.getProtocol())) {
+            // 加载 ConfiguratorFactory，并生成 Configurator 实例，然后通过实例配置 url
             url = ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
                     .getExtension(url.getProtocol()).getConfigurator(url).configure(url);
         }
 
         /**
+         * 若URL中存在scope的配置，则遵循如下规则执行
+         *
          * scope = none，不导出服务  --> 注意：这里的none为none字符串而不是null对象，这个none由配置文件中配置
          * scope != remote，导出到本地
          * scope != local，导出到远程
+         * 无配置scope， 本地和远程都导出
          */
         String scope = url.getParameter(SCOPE_KEY);
         // don't export when none is configured
@@ -672,13 +705,17 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                 if (!isOnlyInJvm() && logger.isInfoEnabled()) {
                     logger.info("Export dubbo service " + interfaceClass.getName() + " to url " + url);
                 }
+                // 开始处理，传入的registryURLs参数，此参数为list，因为Dubbo支持多协议导出，因为list中的每一个元素代表这一种协议
                 if (CollectionUtils.isNotEmpty(registryURLs)) {
                     for (URL registryURL : registryURLs) {
+                        // 遍历每一个协议
                         //if protocol is only injvm ,not register
                         if (LOCAL_PROTOCOL.equalsIgnoreCase(url.getProtocol())) {
                             continue;
                         }
+                        // 获取当前协议key为dynamic的参数，
                         url = url.addParameterIfAbsent(DYNAMIC_KEY, registryURL.getParameter(DYNAMIC_KEY));
+                        // 解析当前协议内部配置的monitor对象，并追加到URL中
                         URL monitorUrl = loadMonitor(registryURL);
                         if (monitorUrl != null) {
                             url = url.addParameterAndEncoded(MONITOR_KEY, monitorUrl.toFullString());
@@ -688,19 +725,50 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                         }
 
                         // For providers, this is used to enable custom proxy to generate invoker
+                        // 获取服务提供者针对代理的配置(可以配置使用指定的代理方式，在如下使用PROXY_FACTORY创建代理对象会用到)
                         String proxy = url.getParameter(PROXY_KEY);
                         if (StringUtils.isNotEmpty(proxy)) {
                             registryURL = registryURL.addParameter(PROXY_KEY, proxy);
                         }
                         /**
-                         * 此行代码执行结束后，会获取ref对象的invoker对象，
-                         * 其中内部会动态生成Wrapper包装类，Wrapper会对ref对象进行解析。
-                         * 然后利用模板方法设计模式，将invoke中doInvoke的逻辑委托给Wrapper类去执行
+                         * ===========================重点===============================
+                         * 这行代码熟悉么？之前总结过PROXY_FACTORY的获取是通过如下代码获取的：
+                         * private static final ProxyFactory PROXY_FACTORY = ExtensionLoader.getExtensionLoader(ProxyFactory.class).getAdaptiveExtension();
+                         * 那么，它就是ProxyFactory的自适应扩展类。关于自适应扩展类，在之前的总结也提到了，它可以动态的根据url的参数获取不同的ProxyFactory，进而执行
+                         * 对应的方法。
+                         * 在之前的文章中有粘贴过ProxyFactory自适应扩展类的源码，其内部是根据key为proxy的参数来决定使用哪一个ProxyFactory。这也是为什么在上述有一个
+                         * 从协议中获取proxy的代码 ===> String proxy = url.getParameter(PROXY_KEY);
+                         * 就是为了在此处能够显示的指定使用哪一个ProxyFactory来创建对象。
+                         *
+                         * 在本例中，因为没有配置proxy的属性，因此使用的是默认的JavassistProxyFactory类(如果不知道为什么，可以参考我的
+                         * 上篇文章：【Dubbo2.7.3版本源码学习系列五: 学习Dubbo服务导出源码前置知识点(ProxyFactory和Wrapper类)】文章。
+                         *
+                         * 如果你有了上篇文章的基础，那么你应该知道此时返回的Invoker对象长什么样子了，
+                         * 它就是AbstractProxyInvoker的匿名内部类，其中它的doInvoker方法将会委托给内部生成的Wrapper类来执行
+                         * ===========================重点===============================
                          */
                         Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString()));
+                        /*
+                         * ==================================注意==============================
+                         * 注意一下这个对象(后续会使用到它): 它内部存储了当前服务对应的Invoker对象，
+                         * 以及当前服务的所有配置信息(ServiceConfig)
+                         * ==================================注意==============================
+                         */
                         DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
 
+                        /**
+                         * ===========================重点===============================
+                         * 此处的protocol也是自适应扩展类，它的获取方式如下所示：
+                         * private static final Protocol protocol = ExtensionLoader.getExtensionLoader(Protocol.class).getAdaptiveExtension();
+                         *
+                         * 因此具体使用哪一个Protocol来进行导出，由wrapperInvoker中的url属性中key为protocol的值决定。
+                         * 在本例中，此处wrapperInvoker中的url属性中key为protocol的值为registry，那么此时将使用RegistryProtocol导出服务
+                         * PS: 也许最开始执行的并不是RegistryProtocol的export方法，而是它的Wrapper(这个Wrapper为之前说的AOP的Wrapper类)类，这里要注意下
+                         * 具体的导出逻辑，应该追溯到RegistryProtocol类
+                         * ===========================重点===============================
+                         */
                         Exporter<?> exporter = protocol.export(wrapperInvoker);
+                        // 将导出的服务存在本地jvm的exporters属性中，完成导出
                         exporters.add(exporter);
                     }
                 } else {
