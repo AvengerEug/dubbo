@@ -744,7 +744,9 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                          * 上篇文章：【Dubbo2.7.3版本源码学习系列五: 学习Dubbo服务导出源码前置知识点(ProxyFactory和Wrapper类)】文章。
                          *
                          * 如果你有了上篇文章的基础，那么你应该知道此时返回的Invoker对象长什么样子了，
-                         * 它就是AbstractProxyInvoker的匿名内部类，其中它的doInvoker方法将会委托给内部生成的Wrapper类来执行
+                         * 它就是AbstractProxyInvoker的匿名内部类，其中它的doInvoker方法将会委托给内部生成的Wrapper类来执行。
+                         *
+                         * 同时我们要注意：构建Invoker对象时的URL是从协议中获取的，也就是针对协议而言的
                          * ===========================重点===============================
                          */
                         Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString()));

@@ -212,6 +212,18 @@ public class RegistryProtocol implements Protocol {
     }
 
     public void register(URL registryUrl, URL registeredProviderUrl) {
+        /**
+         * registryFactory是dubbo依赖注入进来的，按照之前的管理它是一个
+         * 自适应扩展类。
+         * 查看RegistryFactory的getRegistry方法签名后
+         * @see RegistryFactory#getRegistry(org.apache.dubbo.common.URL)
+         * 你会发现，它被@Adaptive注解修饰了，因此内部适应具体的哪一个registryFactory，
+         * 由url中key为protocol的参数来决定，否则则使用RegistryFactory接口中@SPI注解
+         * 指定的值(指定了值为dubbo)来决定
+         *
+         * 在此处，很明显，url中的protocol为zookeeper，因此使用的是zookeeper注册中心。
+         * 后续的过程就是为zookeeper创建对应的节点完成服务注册了。
+         */
         Registry registry = registryFactory.getRegistry(registryUrl);
         registry.register(registeredProviderUrl);
     }
@@ -232,44 +244,52 @@ public class RegistryProtocol implements Protocol {
     public <T> Exporter<T> export(final Invoker<T> originInvoker) throws RpcException {
         /**
          * 获取注册中心的url
-         * 以zookeeper为例，得到的url如下
+         * 大致逻辑为：
+         * 1、拿到URL中key为registry的值，如果存在则使用对应的值，否则使用缺省值(dubbo)
+         * 2、修改URL中的协议属性，将协议设置为当前暴露服务配置中实际的协议。
+         *    即，我们配置<dubbo:registry address="zookeeper://127.0.0.1:2181" />中的zookeeper协议
+         * 因此，url的信息为：
          * zookeeper://127.0.0.1:2181/com.alibaba.dubbo.registry.RegistryService?application=demo-provider&dubbo=2.0.2&export=dubbo%3A%2F%2F172.17.48.52%3A20880%2Fcom.alibaba.dubbo.demo.DemoService%3Fanyhost%3Dtrue%26application%3Ddemo-provider
          */
         URL registryUrl = getRegistryUrl(originInvoker);
 
-        // url to export locally ==> 获取导出到本地的url
+        /**
+         * url to export locally ==> 获取invoker中key为export的参数，即当前需要被导出服务的URL
+         *
+         * 其实getRegistryUrl(originInvoker)和getProviderUrl(originInvoker)步骤
+         * 就是将invoker中包含注册中心的url和当前导出服务的url拿出来
+         */
         URL providerUrl = getProviderUrl(originInvoker);
 
         // Subscribe the override data
         // FIXME When the provider subscribes, it will affect the scene : a certain JVM exposes the service and call
         //  the same service. Because the subscribed is cached key with the name of the service, it causes the
         //  subscription information to cover.
-        // 获取订阅 URL，比如：
-        // provider://172.17.48.52:20880/com.alibaba.dubbo.demo.DemoService?category=configurators&check=false&anyhost=true&application=demo-provider&dubbo=2.0.2&generic=false&interface=com.alibaba.dubbo.demo.DemoService&methods=sayHello
+        // 获取订阅 URL， 其实就是修改协议，然后为url添加两个参数 category -> configurators 和 check -> false
         final URL overrideSubscribeUrl = getSubscribedOverrideUrl(providerUrl);
-        // 创建监听器
+        // 创建监听器·
         final OverrideListener overrideSubscribeListener = new OverrideListener(overrideSubscribeUrl, originInvoker);
         overrideListeners.put(overrideSubscribeUrl, overrideSubscribeListener);
-
+        // TODO 这里跟监听器逻辑相关，后续再总结
         providerUrl = overrideUrlWithConfig(providerUrl, overrideSubscribeListener);
 
         /**
-         * 导出服务，这里调用方法的名字叫exportLocalExport，
-         * 但它内部做的事情和导出到JVM差不多，但是它并不是采用Injvm协议而是使用Dubbo协议
-         * 其大致逻辑为：
-         * 将服务保存到jvm中，并开启服务器以便接收RPC请求
+         * 根据当前暴露服务的URL，完成服务导出功能
          */
         final ExporterChangeableWrapper<T> exporter = doLocalExport(originInvoker, providerUrl);
 
-        // url to registry
+        // 从invoker中构建注册中心对象
         final Registry registry = getRegistry(originInvoker);
+        // 合并注册中心的url以及暴露服务的url，拿到注册服务需要的url
         final URL registeredProviderUrl = getRegisteredProviderUrl(providerUrl, registryUrl);
         ProviderInvokerWrapper<T> providerInvokerWrapper = ProviderConsumerRegTable.registerProvider(originInvoker,
                 registryUrl, registeredProviderUrl);
         //to judge if we need to delay publish
         boolean register = registeredProviderUrl.getParameter("register", true);
         if (register) {
-            // 将服务注册到注册中心
+            /**
+             * 将服务注册到注册中心，其内部就是往zookeeper创建节点，
+             */
             register(registryUrl, registeredProviderUrl);
             providerInvokerWrapper.setReg(true);
         }
@@ -292,6 +312,7 @@ public class RegistryProtocol implements Protocol {
 
     @SuppressWarnings("unchecked")
     private <T> ExporterChangeableWrapper<T> doLocalExport(final Invoker<T> originInvoker, URL providerUrl) {
+        // 为当前暴露出去的服务生成一个key，起缓存作用
         String key = getCacheKey(originInvoker);
 
         /**
@@ -302,12 +323,32 @@ public class RegistryProtocol implements Protocol {
          * 源码后可以发现，如果key对应的value没有值，则会执行后面的Functional，并且将key作为参数
          * 传入到Functional中。
          * 因此。整段代码的含义为：
-         * 如果key不存在，则将key作为参数调用后面的方法，并将后面方法返回出来的对象放入ConcurrentHashMap中,
-         * 以及return出来
+         * 如果key不存在，则将key作为参数调用后面的方法，并将后面方法返回出来的对象放入bounds(ConcurrentHashMap)中
+         * 并return出来，如果存在，则直接return。
+         * 其主要重要的部分为传入的Functional逻辑
          */
         return (ExporterChangeableWrapper<T>) bounds.computeIfAbsent(key, s -> {
+            // 构建invoker的委托者，内部存储了当前暴露服务的URL以及包含注册中心url和服务暴露url的invoker
             Invoker<?> invokerDelegate = new InvokerDelegate<>(originInvoker, providerUrl);
-            // 缺省时使用的是Dubbo协议
+            /**
+             * 这里protocol是dubbo框架注入进来的。
+             * 阅读过我之前写的【Dubbo2.7.3版本源码学习系列一: 初始Dubbo利用SPI机制实现AOP和IOC的源码分析】
+             * 文章就能知道，dubbo支持依赖注入功能。其大致逻辑为：
+             * 1、从dubbo的扩展来加载，此时加载的是对应类型的自适应扩展类
+             * 2、从spring容器中获取。
+             *
+             * 有了上述前置知识点后，就能明白，此时的protocol属性是dubbo自动注入的，且Dubbo有对应类型的扩展，
+             * 因此它就是一个自适应扩展类。而protocol的姿势扩展类在
+             * 【Dubbo2.7.3版本源码学习系列四: 阅读Dubbo源码基石 - 自适应扩展机制】文章中也有描述，
+             * 它最终会根据invoker的url中的protocol属性来决定使用哪一个协议执行对应的方法。
+             *
+             * 阅读InvokerDelegate的构造方法后，发现它内部的url就是构造方法的第二个参数：providerUrl
+             * providerUrl就是当前服务暴露的url，我们在配置文件中添加了
+             * <dubbo:protocol name="dubbo" />配置，
+             * 因此，它的协议为dubbo，所以此时它的协议为DubboProtocol，
+             * 接下来，我们直接定位到DubboProtocol的export方法(其实内部会获取到它的Wrapper类，Wrapper类的逻辑
+             * 在这不考虑了，咱们直接定位到DubboProtocol的export方法)
+             */
             return new ExporterChangeableWrapper<>((Exporter<T>) protocol.export(invokerDelegate), originInvoker);
         });
     }

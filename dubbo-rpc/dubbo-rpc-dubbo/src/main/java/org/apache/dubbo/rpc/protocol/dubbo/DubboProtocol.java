@@ -280,6 +280,7 @@ public class DubboProtocol extends AbstractProtocol {
 
     @Override
     public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
+        // 获取invoke中的url，此时的url应该为服务提供者的url
         URL url = invoker.getUrl();
 
         // export service.
@@ -292,6 +293,7 @@ public class DubboProtocol extends AbstractProtocol {
         exporterMap.put(key, exporter);
 
         //export an stub service for dispatching event
+        // url中无STUB_EVENT_KEY和IS_CALLBACK_SERVICE的配置，此处直接跳过
         Boolean isStubSupportEvent = url.getParameter(STUB_EVENT_KEY, DEFAULT_STUB_EVENT);
         Boolean isCallbackservice = url.getParameter(IS_CALLBACK_SERVICE, false);
         if (isStubSupportEvent && !isCallbackservice) {
@@ -307,7 +309,7 @@ public class DubboProtocol extends AbstractProtocol {
             }
         }
 
-        // 启动服务器
+        // 启动netty服务器
         openServer(url);
         // 优化序列化
         optimizeSerialization(url);
