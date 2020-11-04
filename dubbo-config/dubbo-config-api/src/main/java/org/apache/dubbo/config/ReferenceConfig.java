@@ -344,7 +344,18 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
         }
         map.put(REGISTER_IP_KEY, hostToRegistry);
 
-        // map为当前引入服务的一些配置信息，并根据这些信息来创建代理对象
+        /**
+         * map为当前引入服务的一些配置信息，并根据这些信息来创建代理对象
+         *
+         * 是一个MockClusterInvoker的代理对象  --> FailoverClusterInvoker
+         * 其中它内部包含了：
+         * InvokerDelegate
+         * {ConsumerContextFilter}
+         * {FutureFilter}
+         * {MonitorFilter}
+         * AbstractInvoker（HttpClient） --> 调用服务提供者地址
+         *
+         */
         ref = createProxy(map);
 
         String serviceKey = URL.buildKey(interfaceName, group, version);

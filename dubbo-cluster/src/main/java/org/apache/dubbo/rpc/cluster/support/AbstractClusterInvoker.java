@@ -128,7 +128,7 @@ public abstract class AbstractClusterInvoker<T> implements Invoker<T> {
         boolean sticky = invokers.get(0).getUrl()
                 .getMethodParameter(methodName, CLUSTER_STICKY_KEY, DEFAULT_CLUSTER_STICKY);
 
-        //ignore overloaded method
+        //ignore overloaded method  --> 对应Dubbo的滞连功能，可以在负载均衡时，一直调用同一个实例
         if (stickyInvoker != null && !invokers.contains(stickyInvoker)) {
             stickyInvoker = null;
         }

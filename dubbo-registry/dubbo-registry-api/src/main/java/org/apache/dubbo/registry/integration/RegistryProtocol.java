@@ -535,6 +535,8 @@ public class RegistryProtocol implements Protocol {
          * 1、标签路由   只是初始化了，还未监听节点
          * 2、应用路由   初始化了，同时监听了应用级别的节点
          * 3、服务路由   初始化了，同时监听了服务级别的节点
+         *
+         * 同时也会把节点对应的值给取出来
          */
         directory.buildRouterChain(subscribeUrl);
 
@@ -544,6 +546,8 @@ public class RegistryProtocol implements Protocol {
          * 同时，获取zookeeper中的consumer节点(路径：/dubbo/org.apache.dubbo.demo.DemoService/consumers)，获取到当前服务的所有提供者，并将他们挨个
          * 转化成invoker对象
          *
+         * 这里为什么会转成invoker对象呢？ 对节点进行了订阅（最终执行了notify方法），其中包含了服务提供者节点，
+         * 把信息拿出来后，顺便把它转换成了invoker对象
          */
         directory.subscribe(subscribeUrl.addParameter(CATEGORY_KEY,
                 PROVIDERS_CATEGORY + "," + CONFIGURATORS_CATEGORY + "," + ROUTERS_CATEGORY));

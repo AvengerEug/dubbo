@@ -127,6 +127,18 @@ public class ZookeeperRegistry extends FailbackRegistry {
         }
     }
 
+    /**
+     *
+     * 由如下方法调用到此处来的：
+     * @see FailbackRegistry#doSubscribe(org.apache.dubbo.common.URL, org.apache.dubbo.registry.NotifyListener)
+     *
+     * 内部最终会执行notify方法，完成服务的注册
+     * @see FailbackRegistry#notify(org.apache.dubbo.common.URL, org.apache.dubbo.registry.NotifyListener, java.util.List)
+     *
+     *
+     * @param url
+     * @param listener
+     */
     @Override
     public void doSubscribe(final URL url, final NotifyListener listener) {
         try {
