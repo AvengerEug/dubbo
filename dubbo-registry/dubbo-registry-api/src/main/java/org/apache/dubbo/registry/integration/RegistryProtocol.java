@@ -121,8 +121,12 @@ public class RegistryProtocol implements Protocol {
 
     private final static Logger logger = LoggerFactory.getLogger(RegistryProtocol.class);
     private static RegistryProtocol INSTANCE;
+
+    // 存储NotifyListener的ConCurrentHashMap, key为url，value为NotifyListener
     private final Map<URL, NotifyListener> overrideListeners = new ConcurrentHashMap<>();
+    // 存放于服务级别的配置相关的监听者
     private final Map<String, ServiceConfigurationListener> serviceConfigurationListeners = new ConcurrentHashMap<>();
+    // 里面存放提供者配置的监听器，即监听提供者配置相关的节点
     private final ProviderConfigurationListener providerConfigurationListener = new ProviderConfigurationListener();
     //To solve the problem of RMI repeated exposure port conflicts, the services that have been exposed are no longer exposed.
     //providerurl <--> exporter
@@ -269,6 +273,7 @@ public class RegistryProtocol implements Protocol {
         final URL overrideSubscribeUrl = getSubscribedOverrideUrl(providerUrl);
         // 创建监听器·
         final OverrideListener overrideSubscribeListener = new OverrideListener(overrideSubscribeUrl, originInvoker);
+        // 存储到map中，
         overrideListeners.put(overrideSubscribeUrl, overrideSubscribeListener);
         // TODO 这里跟监听器逻辑相关，后续再总结
         providerUrl = overrideUrlWithConfig(providerUrl, overrideSubscribeListener);
@@ -487,6 +492,7 @@ public class RegistryProtocol implements Protocol {
     @Override
     @SuppressWarnings("unchecked")
     public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
+        // 又把URL中的协议改成zookeeper了，相当于还原URL，目的就是使用协议前先走一遍RegistryProtocol
         url = URLBuilder.from(url)
                 .setProtocol(url.getParameter(REGISTRY_KEY, DEFAULT_REGISTRY))
                 .removeParameter(REGISTRY_KEY)
@@ -513,20 +519,33 @@ public class RegistryProtocol implements Protocol {
     }
 
     private <T> Invoker<T> doRefer(Cluster cluster, Registry registry, Class<T> type, URL url) {
-        // 创建服务目录, 指定当前服务目录的类型、url、注册中心、协议 ==> 最终每一个服务会对应一个服务目录
+        /**
+         * 创建服务目录, 指定当前服务目录的类型、url、注册中心、协议 ==> 最终每一个服务会对应一个服务目录
+         *
+         * 把它理解成zookeeper注册中心，只不过是将zookeeper注册中心的信息保存到本地来了，防止频繁的和zookeeper
+         * 进行网络传输。
+         *
+         * 服务目录会在后续的总结中详细介绍，这里先应用黑箱理论。
+         * 它大致的功能就是：
+         * 内部存储了当前引用服务的所有信息，以及所有的invoker等等等等
+         */
         RegistryDirectory<T> directory = new RegistryDirectory<T>(type, url);
         directory.setRegistry(registry);
         directory.setProtocol(protocol);
         // all attributes of REFER_KEY
-        Map<String, String> parameters = new HashMap<String, String>(directory.getUrl().getParameters());
+        Map<String, String> parameters = new HashMap<>(directory.getUrl().getParameters());
         URL subscribeUrl = new URL(CONSUMER_PROTOCOL, parameters.remove(REGISTER_IP_KEY), 0, type.getName(), parameters);
         if (!ANY_VALUE.equals(url.getServiceInterface()) && url.getParameter(REGISTER_KEY, true)) {
             directory.setRegisteredConsumerUrl(getRegisteredConsumerUrl(subscribeUrl, url));
-            // 将当前服务注册到注册中心 --> /dubbo/org.apache.dubbo.demo.DemoService/consumers/consumer%3A%2F%2F197.168.25.149%2Forg.apache.dubbo.demo.DemoService%3Fapplication%3Ddemo-consumer%26category%3Dconsumers%26check%3Dfalse%26dubbo%3D2.0.2%26interface%3Dorg.apache.dubbo.demo.DemoService%26lazy%3Dfalse%26methods%3DsayHello%26pid%3D11116%26qos.port%3D33333%26side%3Dconsumer%26sticky%3Dfalse%26timestamp%3D1603954142875
+            /**
+             * 将当前消费者注册到注册中心 -->
+             * /dubbo/org.apache.dubbo.demo.DemoService/consumers/consumer%3A%2F%2F197.168.25.149%2Forg.apache.dubbo.demo.DemoService%3Fapplication%3Ddemo-consumer%26category%3Dconsumers%26check%3Dfalse%26dubbo%3D2.0.2%26interface%3Dorg.apache.dubbo.demo.DemoService%26lazy%3Dfalse%26methods%3DsayHello%26pid%3D11116%26qos.port%3D33333%26side%3Dconsumer%26sticky%3Dfalse%26timestamp%3D1603954142875
+             * 用来标识对应服务的消费者
+             */
             registry.register(directory.getRegisteredConsumerUrl());
         }
         /**
-         * 此处主要是构建路由链路。构建路由链路的目的就是为了过滤。
+         * 此处主要是构建路由链路。构建路由链路的目的就是为了服务调用时的过滤。
          * 因为上面创建的服务目录需要将注册中心的信息存储起来，但是作为消费者而言，
          * 它只对能访问的服务感兴趣，因此在同步服务到本地时，需要筛选去自己能够调用的。
          *
@@ -536,7 +555,10 @@ public class RegistryProtocol implements Protocol {
          * 2、应用路由   初始化了，同时监听了应用级别的节点
          * 3、服务路由   初始化了，同时监听了服务级别的节点
          *
-         * 同时也会把节点对应的值给取出来
+         * 同时也会把节点对应的值给取出来。
+         *
+         * 此处是构建路由链，后续服务调用时会用到它，这里先忽略。
+         * 待总结到服务目录时再详细介绍
          */
         directory.buildRouterChain(subscribeUrl);
 
@@ -547,7 +569,12 @@ public class RegistryProtocol implements Protocol {
          * 转化成invoker对象
          *
          * 这里为什么会转成invoker对象呢？ 对节点进行了订阅（最终执行了notify方法），其中包含了服务提供者节点，
-         * 把信息拿出来后，顺便把它转换成了invoker对象
+         * 把信息拿出来后，顺便把它转换成了invoker对象。
+         *
+         * 其内部最终会调用到如下方法：
+         * @see RegistryDirectory#refreshInvoker(java.util.List)
+         * 为所有的url生成invoker对象，并存在于服务目录处。
+         * 所以，执行完此行代码后，服务目录中已经保存了当前服务提供者的所有invoker对象
          */
         directory.subscribe(subscribeUrl.addParameter(CATEGORY_KEY,
                 PROVIDERS_CATEGORY + "," + CONFIGURATORS_CATEGORY + "," + ROUTERS_CATEGORY));
@@ -560,6 +587,16 @@ public class RegistryProtocol implements Protocol {
          * 如果url中无key为cluster的参数，则使用failover作为默认值返回。
          * 因此，默认情况下，使用的key为failover对应的扩展。但同时要注意，
          * 会出现包装类的情况。
+         *
+         * 因此，默认使用的是FailoverCluster类，但是还会存在Wrapper类，
+         * 通过源码分析，最终它存在一个叫MockClusterWrapper的Wrapper类来包装FailoverCluster类
+         *
+         * 执行完MockClusterWrapper的join方法后，返回的invoker对象结构为如下所示：
+         * MockClusterInvoker
+         *   - FailoverClusterInvoker
+         *
+         * 这些clusterInvoker内部都维护了registryDirectory对象。
+         *
          */
         Invoker invoker = cluster.join(directory);
         ProviderConsumerRegTable.registerConsumer(invoker, url, subscribeUrl, directory);

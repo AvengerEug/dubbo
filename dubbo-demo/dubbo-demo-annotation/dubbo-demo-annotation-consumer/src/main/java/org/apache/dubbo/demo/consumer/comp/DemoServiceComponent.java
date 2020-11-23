@@ -22,15 +22,23 @@ package org.apache.dubbo.demo.consumer.comp;
 import org.apache.dubbo.config.annotation.Reference;
 import org.apache.dubbo.demo.DemoService;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Component("demoServiceComponent")
-public class DemoServiceComponent implements DemoService {
-    @Reference
+public class DemoServiceComponent {
+
+    @Autowired
     private DemoService demoService;
 
-    @Override
+    @Reference
+    @Lazy
+    private DemoService demoService1;
+
     public String sayHello(String name) {
-        return demoService.sayHello(name);
+        demoService1.sayHello(name);
+        demoService.sayHello(name);
+        return null;
     }
 }

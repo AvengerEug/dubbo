@@ -14,31 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.dubbo.demo.provider;
+package org.apache.dubbo.demo.consumer;
 
-import org.apache.dubbo.common.extension.ExtensionLoader;
-import org.apache.dubbo.rpc.Protocol;
+import org.apache.dubbo.demo.DemoService;
+
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
-public class Application {
+import java.io.IOException;
+
+public class Consumer {
     /**
      * In order to make sure multicast registry works, need to specify '-Djava.net.preferIPv4Stack=true' before
      * launch the application
      */
-    public static void main(String[] args) throws Exception {
-        /**
-         * 这里涉及到解析xml文件，参考dubbo-config-spring模块的如下类
-         * @see org.apache.dubbo.config.spring.schema.DubboNamespaceHandler
-         * 基本上xml中配置的dubbo:xxx 对应的就是一个类
-         */
-        ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext("spring/dubbo-provider.xml");
+    public static void main(String[] args) throws IOException {
+        ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext("spring/dubbo-consumer.xml");
         context.start();
-
-        ExtensionLoader<Protocol> extensionLoader = ExtensionLoader.getExtensionLoader(Protocol.class);
-
-        // 获取到的是Wrapper类
-        Protocol injvm = extensionLoader.getExtension("injvm");
-
+        DemoService demoService = context.getBean("demoService", DemoService.class);
+        String hello = demoService.sayHello("world");
+        System.out.println("result: " + hello);
         System.in.read();
     }
 }

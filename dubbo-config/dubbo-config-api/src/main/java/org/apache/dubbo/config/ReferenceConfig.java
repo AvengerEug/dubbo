@@ -29,6 +29,7 @@ import org.apache.dubbo.config.annotation.Reference;
 import org.apache.dubbo.config.context.ConfigManager;
 import org.apache.dubbo.config.support.Parameter;
 import org.apache.dubbo.metadata.integration.MetadataReportService;
+import org.apache.dubbo.registry.integration.RegistryProtocol;
 import org.apache.dubbo.remoting.Constants;
 import org.apache.dubbo.rpc.Invoker;
 import org.apache.dubbo.rpc.Protocol;
@@ -287,6 +288,7 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
      *
      */
     private void init() {
+        // 校验，防止重复初始化
         if (initialized) {
             return;
         }
@@ -297,7 +299,15 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
         map.put(SIDE_KEY, CONSUMER_SIDE);
 
         appendRuntimeParameters(map);
-        // 判断当前服务的接口是否为泛化接口
+        /**
+         * 判断当前服务的接口是否为泛化接口
+         * Dubbo支持泛化服务的功能。
+         * 详见官网API:
+         *
+         * http://dubbo.apache.org/zh-cn/docs/2.7/user/demos/generic-service/
+         *
+         * 此处引用的服务为非泛化服务，此处逻辑直接忽略
+         */
         if (!isGeneric()) {
             String revision = Version.getVersion(interfaceClass, version);
             if (revision != null && revision.length() > 0) {
@@ -312,6 +322,7 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
                 map.put(METHODS_KEY, StringUtils.join(new HashSet<String>(Arrays.asList(methods)), COMMA_SEPARATOR));
             }
         }
+
         map.put(INTERFACE_KEY, interfaceName);
         appendParameters(map, metrics);
         appendParameters(map, application);
@@ -320,6 +331,11 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
         // appendParameters(map, consumer, Constants.DEFAULT_KEY);
         appendParameters(map, consumer);
         appendParameters(map, this);
+
+        /**
+         * 获取配置在服务中的一些方法配置，比如能配置某个方法重试几次、超时时间等等
+         * 在本案例中，无配置，此处逻辑直接忽略。
+         */
         Map<String, Object> attributes = null;
         if (CollectionUtils.isNotEmpty(methods)) {
             attributes = new HashMap<String, Object>();
@@ -345,16 +361,19 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
         map.put(REGISTER_IP_KEY, hostToRegistry);
 
         /**
-         * map为当前引入服务的一些配置信息，并根据这些信息来创建代理对象
+         * map为当前引入服务的一些配置信息，并根据这些信息来创建代理对象。
          *
-         * 是一个MockClusterInvoker的代理对象  --> FailoverClusterInvoker
-         * 其中它内部包含了：
-         * InvokerDelegate
-         * {ConsumerContextFilter}
-         * {FutureFilter}
-         * {MonitorFilter}
-         * AbstractInvoker（HttpClient） --> 调用服务提供者地址
-         *
+         * 最终获取出来的是一个MockClusterInvoker的代理对象
+         * 其结构为：
+         *   proxy
+         *     -- MockClusterInvoker
+         *       -- FailoverClusterInvoker
+         *         -- InvokerDelegate
+         *           -- Invoker(就是CallbackRegistrationInvoker)
+         *             -- ConsumerContextFilter
+         *             -- FutureFilter
+         *             -- MonitorFilter
+         *             -- DubboInvoker --> DubboInvoker处理doInvoker逻辑，父类AbstractInvoker处理invoke逻辑（HttpClient） --> 调用服务提供者地址
          */
         ref = createProxy(map);
 
@@ -387,7 +406,11 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
             }
         } else {
             urls.clear(); // reference retry init will add url to urls, lead to OOM
-            if (url != null && url.length() > 0) { // user specified URL, could be peer-to-peer address, or register center's address.
+            if (url != null && url.length() > 0) {
+                /**
+                 * Dubbo直连处理逻辑
+                 * 官网文档(Dubbo直连功能)：http://dubbo.apache.org/zh-cn/docs/2.7/user/demos/explicit-target/
+                 */
                 String[] us = SEMICOLON_SPLIT_PATTERN.split(url);
                 if (us != null && us.length > 0) {
                     for (String u : us) {
@@ -404,8 +427,17 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
                 }
             } else { // assemble URL from register center's configuration
                 // if protocols not injvm checkRegistry
-                if (!LOCAL_PROTOCOL.equalsIgnoreCase(getProtocol())){
+                if (!LOCAL_PROTOCOL.equalsIgnoreCase(getProtocol())) {
+                    /**
+                     * 非jvm协议处理逻辑。
+                     */
                     checkRegistry();
+
+                    /**
+                     * 其主要目的就是拿到配置的所有注册中心信息，
+                     * 并且修改其内部的URL属性，将协议统一改成registry
+                     * 后续所有与注册中心相关的操作，先执行RegistryProtocol
+                     */
                     List<URL> us = loadRegistries(false);
                     if (CollectionUtils.isNotEmpty(us)) {
                         for (URL u : us) {
@@ -423,7 +455,14 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
             }
 
             if (urls.size() == 1) {
-                // 根据url的protocol来决定使用哪种协议，此时使用的是RegistryProtocol协议
+                /**
+                 * 根据url的protocol来决定使用哪种协议，此时使用的是RegistryProtocol协议.
+                 * 正常情况下，我们只使用一个注册中心，本案例中，咱们使用的zookeeper
+                 * 但是别忘记，上述的URL的协议已经被改成registry，因此先执行的是
+                 * registryProtocol的refer方法(忽略它的Wrapper方法)
+                 * @see RegistryProtocol#refer(java.lang.Class, org.apache.dubbo.common.URL)
+                 *
+                 */
                 invoker = REF_PROTOCOL.refer(interfaceClass, urls.get(0));
             } else {
                 // 如果一个服务有多个实现时，走的是此分支，最终每一个服务的实现会变成一个invoker

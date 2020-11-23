@@ -43,7 +43,7 @@ import static org.apache.dubbo.rpc.Constants.SERVICE_FILTER_KEY;
 public class ProtocolFilterWrapper implements Protocol {
 
     /**
-     * 在构造是，此属性的值为：
+     * 在构造时，此属性的值为：
      * ProtocolListenerWrapper
      */
     private final Protocol protocol;
@@ -145,6 +145,25 @@ public class ProtocolFilterWrapper implements Protocol {
         if (REGISTRY_PROTOCOL.equals(url.getProtocol())) {
             return protocol.refer(type, url);
         }
+        /**
+         * 构建invoker的调用链，
+         *
+         * 其内部的逻辑为：
+         * 1、获取当前dubbo 所有的过滤器
+         * 0 = {ConsumerContextFilter@3427}
+         * 1 = {FutureFilter@3428}
+         * 2 = {MonitorFilter@3429}
+         *
+         * 2、将传入的invoker对象放到最后(即将protocol.refer(type, url)代码返回的invoker对象放到最后执行)。
+         *
+         * 此方法返回的invoker对象(CallbackRegistrationInvoker)内部invoker方法的调用顺序为：
+         *
+         * 0 = {ConsumerContextFilter@3427}  --> Dubbo参数透传
+         * 1 = {FutureFilter@3428}
+         * 2 = {MonitorFilter@3429}
+         * protocol.refer(type, url)生成的invoker对象  ==> 此对象是一个AsyncToSyncInvoker，其内部包含DubboInvoker
+         *
+         */
         return buildInvokerChain(protocol.refer(type, url), REFERENCE_FILTER_KEY, CommonConstants.CONSUMER);
     }
 

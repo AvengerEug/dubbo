@@ -71,7 +71,10 @@ public class MockClusterInvoker<T> implements Invoker<T> {
     @Override
     public Result invoke(Invocation invocation) throws RpcException {
         Result result = null;
-
+        /**
+         * 参考官网服务降级相关文档：
+         * @{link} http://dubbo.apache.org/zh-cn/docs/2.7/user/demos/service-downgrade/
+         */
         String value = directory.getUrl().getMethodParameter(invocation.getMethodName(), MOCK_KEY, Boolean.FALSE.toString()).trim();
         if (value.length() == 0 || value.equalsIgnoreCase("false")) {
             //no mock

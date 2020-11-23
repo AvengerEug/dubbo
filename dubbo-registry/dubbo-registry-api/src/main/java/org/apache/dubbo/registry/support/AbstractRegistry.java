@@ -26,6 +26,7 @@ import org.apache.dubbo.common.utils.NamedThreadFactory;
 import org.apache.dubbo.common.utils.UrlUtils;
 import org.apache.dubbo.registry.NotifyListener;
 import org.apache.dubbo.registry.Registry;
+import org.apache.dubbo.registry.integration.RegistryDirectory;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -415,6 +416,10 @@ public abstract class AbstractRegistry implements Registry {
             String category = entry.getKey();
             List<URL> categoryList = entry.getValue();
             categoryNotified.put(category, categoryList);
+            /**
+             * 这个listener就是RegistryDirectory
+             * @see RegistryDirectory#notify(java.util.List)
+             */
             listener.notify(categoryList);
             // We will update our cache file after each notification.
             // When our Registry has a subscribe failure due to network jitter, we can return at least the existing cache URL.

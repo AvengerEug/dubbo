@@ -31,6 +31,7 @@ import org.apache.dubbo.configcenter.DynamicConfiguration;
 import org.apache.dubbo.registry.NotifyListener;
 import org.apache.dubbo.registry.Registry;
 import org.apache.dubbo.registry.support.AbstractRegistry;
+import org.apache.dubbo.registry.support.FailbackRegistry;
 import org.apache.dubbo.remoting.Constants;
 import org.apache.dubbo.rpc.Invocation;
 import org.apache.dubbo.rpc.Invoker;
@@ -185,6 +186,9 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
          * RegistryDirectory中的registry由构建RegistryDirectory指定的。
          * 假设此时的注册中心为zookeeper，因此会进入zookeeper的subscribe方法。
          * 但是，zookeeper中并没有subscribe方法，因此会进入父类(FailbackRegistry)的subscribe方法
+         *
+         * @see FailbackRegistry#subscribe(org.apache.dubbo.common.URL, org.apache.dubbo.registry.NotifyListener)
+         * (org.apache.dubbo.registry.support.FailbackRegistry#subscribe(org.apache.dubbo.common.URL, org.apache.dubbo.registry.NotifyListener))
          */
         registry.subscribe(url, this);
     }
@@ -298,6 +302,11 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
             if (invokerUrls.isEmpty()) {
                 return;
             }
+            /**
+             * 将传入的多个url转成map。其中key为url的全路径，value为invoker对象
+             * 具体如何转成invoker对象的，参考如下方法
+             * @see RegistryDirectory#toInvokers(java.util.List)
+             */
             Map<String, Invoker<T>> newUrlInvokerMap = toInvokers(invokerUrls);// Translate url list to Invoker map
 
             /**
@@ -318,8 +327,12 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
             // pre-route and build cache, notice that route cache should build on original Invoker list.
             // toMergeMethodInvokerMap() will wrap some invokers having different groups, those wrapped invokers not should be routed.
             routerChain.setInvokers(newInvokers);
-            // 在此处，已经将当前服务的所有提供者对应的URL转成invoker对象了，存在了RegistryDirectory的invokers属性中
-            // 里边包含了当前服务的所有提供者
+            /**
+             * 在此处，已经将当前服务的所有提供者对应的URL转成invoker对象了，存到RegistryDirectory的invokers属性中
+             * 里边包含了当前服务的所有提供者
+             *
+             * 因此，当前服务的所有提供者都变成了invoker，存在了服务目录的invokers属性中
+             */
             this.invokers = multiGroup ? toMergeInvokerList(newInvokers) : newInvokers;
             this.urlInvokerMap = newUrlInvokerMap;
 
@@ -443,6 +456,24 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
                         enabled = url.getParameter(ENABLED_KEY, true);
                     }
                     if (enabled) {
+                        /**
+                         * 将url转成invoker对象
+                         * 大致结构为：
+                         * InvokerDelegate
+                         *   - Invoker(就是CallbackRegistrationInvoker)
+                         *     - 0 = {ConsumerContextFilter@3442}
+                         *     - 1 = {FutureFilter@3443}
+                         *     - 2 = {MonitorFilter@3444}
+                         *     - AsyncToSyncInvoker
+                         *       - DubboInvoker
+                         *
+                         * 即invoker的委托者，而invoker的创建来自于protocol.refer(serviceType, url)逻辑。
+                         * 此时的protocol为Protocol的自适应扩展类，最终会根据URL的protocol属性来决定使用具体
+                         * 的哪一种协议(缺省为Dubbo)
+                         *
+                         * 在本例中，协议为Dubbo(因为咱们配置的注册中心协议为dubbo)。此处，咱们继续忽略它的Wrapper类，
+                         * 直接把类定位到DubboProtocol, 但DubboProtocol无refer方法，因此定位到父类AbstractProtocol
+                         */
                         invoker = new InvokerDelegate<>(protocol.refer(serviceType, url), url, providerUrl);
                     }
                 } catch (Throwable t) {

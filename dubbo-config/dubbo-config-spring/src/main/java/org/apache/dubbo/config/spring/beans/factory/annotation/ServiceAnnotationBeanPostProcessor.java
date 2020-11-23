@@ -124,36 +124,39 @@ public class ServiceAnnotationBeanPostProcessor implements BeanDefinitionRegistr
      * @param registry       {@link BeanDefinitionRegistry}
      */
     private void registerServiceBeans(Set<String> packagesToScan, BeanDefinitionRegistry registry) {
-
+        // 初始化Dubbo自己开发的类路径扫描器(与mybatis差不多，mybatis也自己定义了)
         DubboClassPathBeanDefinitionScanner scanner =
                 new DubboClassPathBeanDefinitionScanner(registry, environment, resourceLoader);
-
+        // 填充Dubbo自己开发的beanName构建器
         BeanNameGenerator beanNameGenerator = resolveBeanNameGenerator(registry);
-
         scanner.setBeanNameGenerator(beanNameGenerator);
-
+        // 指定扫描路径中有Dubbo自己开发的@Service注解的类
         scanner.addIncludeFilter(new AnnotationTypeFilter(Service.class));
 
-        /**
-         * Add the compatibility for legacy Dubbo's @Service
-         *
-         * The issue : https://github.com/apache/dubbo/issues/4330
-         * @since 2.7.3
-         */
+        // 向下兼容，同时也识别@com.alibaba.dubbo.config.annotation.Service注解
         scanner.addIncludeFilter(new AnnotationTypeFilter(com.alibaba.dubbo.config.annotation.Service.class));
 
         for (String packageToScan : packagesToScan) {
-
-            // Registers @Service Bean first
+            /**
+             * Registers @Service Bean first
+             * 重点：先注解@Service标识的bean
+             * 类似于spring对@ComponentScan注解的处理，
+             * 执行完此行代码：classpath中被@Service注解标识的类都会以BeanDefinition的格式添加
+             * 到spring容器中去，为后续实例化bean做准备
+             */
             scanner.scan(packageToScan);
 
-            // Finds all BeanDefinitionHolders of @Service whether @ComponentScan scans or not.
+            /**
+             * 获取上述步骤扫描出来的所有@Service注解标识的类的beanDefinition
+             * 后续需要根据它来创建ServiceBean的beanDefinition
+             */
             Set<BeanDefinitionHolder> beanDefinitionHolders =
                     findServiceBeanDefinitionHolders(scanner, packageToScan, registry, beanNameGenerator);
 
             if (!CollectionUtils.isEmpty(beanDefinitionHolders)) {
 
                 for (BeanDefinitionHolder beanDefinitionHolder : beanDefinitionHolders) {
+                    // 为每一个@Service注解标识的类创建一个类型为ServiceBean的beanDefinition
                     registerServiceBean(beanDefinitionHolder, registry, scanner);
                 }
 
