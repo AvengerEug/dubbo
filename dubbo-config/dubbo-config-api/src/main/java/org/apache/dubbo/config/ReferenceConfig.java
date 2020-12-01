@@ -366,14 +366,17 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
          * 最终获取出来的是一个MockClusterInvoker的代理对象
          * 其结构为：
          *   proxy
-         *     -- MockClusterInvoker
-         *       -- FailoverClusterInvoker
-         *         -- InvokerDelegate
-         *           -- Invoker(就是CallbackRegistrationInvoker)
-         *             -- ConsumerContextFilter
-         *             -- FutureFilter
-         *             -- MonitorFilter
-         *             -- DubboInvoker --> DubboInvoker处理doInvoker逻辑，父类AbstractInvoker处理invoke逻辑（HttpClient） --> 调用服务提供者地址
+         *     -- MockClusterInvoker                                             *********  1
+         *       -- FailoverClusterInvoker                                       *********  2
+         *         -- InvokerDelegate                                            *********  3
+         *           -- Invoker(就是CallbackRegistrationInvoker)                 *********  4
+         *             -- ConsumerContextFilter                                  *********  5
+         *             -- FutureFilter                                           *********  6
+         *             -- MonitorFilter                                          *********  7
+         *             -- DubboInvoker --> (真实进行RPC调用的invoker)             *********  8
+         *                                  DubboInvoker处理doInvoker逻辑，
+         *                                  父类AbstractInvoker处理invoke逻辑
+         *                                  （HttpClient） --> 调用服务提供者地址
          */
         ref = createProxy(map);
 
@@ -462,6 +465,18 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
                  * registryProtocol的refer方法(忽略它的Wrapper方法)
                  * @see RegistryProtocol#refer(java.lang.Class, org.apache.dubbo.common.URL)
                  *
+                 * 此步骤执行结束后，就有了我们上述总结的Invoker对象结构了
+                 *-- MockClusterInvoker                                             *********  1
+                 *  -- FailoverClusterInvoker                                       *********  2
+                 *    -- InvokerDelegate                                            *********  3
+                 *      -- Invoker(就是CallbackRegistrationInvoker)                 *********  4
+                 *        -- ConsumerContextFilter                                  *********  5
+                 *        -- FutureFilter                                           *********  6
+                 *        -- MonitorFilter                                          *********  7
+                 *        -- DubboInvoker --> (真实进行RPC调用的invoker)             *********  8
+                 *                             DubboInvoker处理doInvoker逻辑，
+                 *                            父类AbstractInvoker处理invoke逻辑
+                 *                           （HttpClient） --> 调用服务提供者地址
                  */
                 invoker = REF_PROTOCOL.refer(interfaceClass, urls.get(0));
             } else {
@@ -501,7 +516,12 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
             URL consumerURL = new URL(CONSUMER_PROTOCOL, map.remove(REGISTER_IP_KEY), 0, map.get(INTERFACE_KEY), map);
             metadataReportService.publishConsumer(consumerURL);
         }
-        // create service proxy
+        /**
+         * 为invoker对象创建代理对象
+         *
+         * 如果对我之前的ProxyFactory文章比较了解的话，
+         * 那它就是JavassistProxyFactory类
+         */
         return (T) PROXY_FACTORY.getProxy(invoker);
     }
 

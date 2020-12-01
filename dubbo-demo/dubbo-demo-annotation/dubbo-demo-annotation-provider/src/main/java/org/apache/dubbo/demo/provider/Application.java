@@ -30,7 +30,11 @@ public class Application {
         context.start();
         // 从spring容器中获取类型为Test的bean，并调用它的hello方法
         Test bean = context.getBean(Test.class);
-        bean.hello();
+        try {
+            bean.hello();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         System.in.read();
     }
 

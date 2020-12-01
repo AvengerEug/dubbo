@@ -243,6 +243,7 @@ public class ReferenceAnnotationBeanPostProcessor extends AnnotationInjectedBean
 
         private final ReferenceBean referenceBean;
 
+        // 这个bean就是我们在服务引用过程中
         private Object bean;
 
         private ReferenceBeanInvocationHandler(ReferenceBean referenceBean) {

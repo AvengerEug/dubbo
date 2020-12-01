@@ -473,6 +473,8 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
                          *
                          * 在本例中，协议为Dubbo(因为咱们配置的注册中心协议为dubbo)。此处，咱们继续忽略它的Wrapper类，
                          * 直接把类定位到DubboProtocol, 但DubboProtocol无refer方法，因此定位到父类AbstractProtocol
+                         *
+                         * @see org.apache.dubbo.rpc.protocol.dubbo.DubboProtocol#protocolBindingRefer(java.lang.Class, org.apache.dubbo.common.URL)
                          */
                         invoker = new InvokerDelegate<>(protocol.refer(serviceType, url), url, providerUrl);
                     }

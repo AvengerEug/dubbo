@@ -29,16 +29,15 @@ import org.springframework.stereotype.Component;
 @Component("demoServiceComponent")
 public class DemoServiceComponent {
 
-    @Autowired
+//    @Autowired
     private DemoService demoService;
 
     @Reference
-    @Lazy
     private DemoService demoService1;
 
     public String sayHello(String name) {
         demoService1.sayHello(name);
-        demoService.sayHello(name);
+//        demoService.sayHello(name);
         return null;
     }
 }
